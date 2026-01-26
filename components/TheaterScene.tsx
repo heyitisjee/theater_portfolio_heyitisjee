@@ -1,10 +1,10 @@
 
 import React from 'react';
-import { ThreeElements } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
+import * as THREE from 'three';
 import Player from './Player';
 import Lobby from './Lobby';
 
-// Fix: Augment the global JSX namespace for React Three Fiber to resolve missing element errors
 declare global {
   namespace JSX {
     interface IntrinsicElements {
@@ -17,74 +17,78 @@ interface TheaterSceneProps {
   onTargetChange: (targetName: string | null) => void;
   onChairTargetChange: (chairName: string | null) => void;
   onAuditoriumDoorDistanceChange: (isNear: boolean) => void;
+  onLobbyDoorDistanceChange: (isNear: boolean) => void; // New prop
   onUsherHover: (isHovering: boolean) => void;
-  // New Handlers
   onStageDoorApproach: (isNear: boolean) => void;
   onPerformerHover: (isHovering: boolean) => void;
-  
   highlightedPoster: string | null;
   auditoriumDoorOpen: boolean;
+  lobbyDoorOpen: boolean;
   isSitting: boolean;
   sittingChairId: string | null;
   isCameraActive: boolean;
-  
-  // New Scene State
   performerArrived: boolean;
+  fov?: number;
+  isVisible?: boolean;
 }
 
 const TheaterScene: React.FC<TheaterSceneProps> = ({ 
   onTargetChange, 
   onChairTargetChange,
   onAuditoriumDoorDistanceChange,
+  onLobbyDoorDistanceChange,
   onUsherHover,
   onStageDoorApproach,
   onPerformerHover,
   highlightedPoster, 
   auditoriumDoorOpen,
+  lobbyDoorOpen,
   isSitting,
   sittingChairId,
   isCameraActive,
-  performerArrived
+  performerArrived,
+  fov = 75,
+  isVisible = true
 }) => {
-  return (
-    <>
-      {/* 
-        LIGHTING STRATEGY:
-        Use a moderate Ambient Light so Black materials stay dark.
-        Use Directional Light for definition.
-        Use localized PointLights in Lobby to make it "White Cube" bright.
-      */}
-      <ambientLight intensity={0.4} /> 
-      
-      {/* Sun/Global Light */}
-      <directionalLight 
-        position={[10, 20, 10]} 
-        intensity={0.5} 
-        castShadow 
-      />
+  const { camera } = useThree();
 
+  useFrame((state, delta) => {
+    if (camera instanceof THREE.PerspectiveCamera) {
+      const lerpFactor = 1 - Math.exp(-10 * delta);
+      camera.fov = THREE.MathUtils.lerp(camera.fov, fov, lerpFactor);
+      camera.updateProjectionMatrix();
+    }
+  });
+
+  return (
+    <group visible={isVisible}>
+      <ambientLight intensity={0.4} /> 
+      <directionalLight position={[10, 20, 10]} intensity={0.5} castShadow />
       <fog attach="fog" args={['#000', 5, 60]} />
       
       <Lobby 
         highlightedPoster={highlightedPoster} 
         auditoriumDoorOpen={auditoriumDoorOpen}
+        lobbyDoorOpen={lobbyDoorOpen}
         performerArrived={performerArrived}
-        isNearStageDoor={true} // Passed down to trigger local effects if needed, handled by App for logic
+        isNearStageDoor={true}
       />
       <Player 
         onTargetChange={onTargetChange} 
         onChairTargetChange={onChairTargetChange}
         onAuditoriumDoorDistanceChange={onAuditoriumDoorDistanceChange}
+        onLobbyDoorDistanceChange={onLobbyDoorDistanceChange}
         onUsherHover={onUsherHover}
         onStageDoorApproach={onStageDoorApproach}
         onPerformerHover={onPerformerHover}
         auditoriumDoorOpen={auditoriumDoorOpen}
+        lobbyDoorOpen={lobbyDoorOpen}
         isSitting={isSitting}
         sittingChairId={sittingChairId}
-        onSecurityViolation={() => {}} // simplified
+        onSecurityViolation={() => {}}
         isCameraActive={isCameraActive}
       />
-    </>
+    </group>
   );
 };
 
