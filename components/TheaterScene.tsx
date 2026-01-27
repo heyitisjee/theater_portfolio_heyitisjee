@@ -17,10 +17,11 @@ interface TheaterSceneProps {
   onTargetChange: (targetName: string | null) => void;
   onChairTargetChange: (chairName: string | null) => void;
   onAuditoriumDoorDistanceChange: (isNear: boolean) => void;
-  onLobbyDoorDistanceChange: (isNear: boolean) => void; // New prop
+  onLobbyDoorDistanceChange: (isNear: boolean) => void;
   onUsherHover: (isHovering: boolean) => void;
   onStageDoorApproach: (isNear: boolean) => void;
   onPerformerHover: (isHovering: boolean) => void;
+  onAuditoriumEntry: () => void;
   highlightedPoster: string | null;
   auditoriumDoorOpen: boolean;
   lobbyDoorOpen: boolean;
@@ -28,6 +29,7 @@ interface TheaterSceneProps {
   sittingChairId: string | null;
   isCameraActive: boolean;
   performerArrived: boolean;
+  stagePerformerIndex: number;
   fov?: number;
   isVisible?: boolean;
 }
@@ -40,6 +42,7 @@ const TheaterScene: React.FC<TheaterSceneProps> = ({
   onUsherHover,
   onStageDoorApproach,
   onPerformerHover,
+  onAuditoriumEntry,
   highlightedPoster, 
   auditoriumDoorOpen,
   lobbyDoorOpen,
@@ -47,6 +50,7 @@ const TheaterScene: React.FC<TheaterSceneProps> = ({
   sittingChairId,
   isCameraActive,
   performerArrived,
+  stagePerformerIndex,
   fov = 75,
   isVisible = true
 }) => {
@@ -62,15 +66,20 @@ const TheaterScene: React.FC<TheaterSceneProps> = ({
 
   return (
     <group visible={isVisible}>
-      <ambientLight intensity={0.4} /> 
-      <directionalLight position={[10, 20, 10]} intensity={0.5} castShadow />
-      <fog attach="fog" args={['#000', 5, 60]} />
+      {/* High base visibility */}
+      <ambientLight intensity={1.0} color="#ffffff" /> 
+      
+      <directionalLight position={[10, 20, 10]} intensity={0.6} castShadow />
+      
+      {/* Pushed fog far back to not hide interior details */}
+      <fog attach="fog" args={['#000', 40, 150]} />
       
       <Lobby 
         highlightedPoster={highlightedPoster} 
         auditoriumDoorOpen={auditoriumDoorOpen}
         lobbyDoorOpen={lobbyDoorOpen}
         performerArrived={performerArrived}
+        stagePerformerIndex={stagePerformerIndex}
         isNearStageDoor={true}
       />
       <Player 
@@ -81,6 +90,7 @@ const TheaterScene: React.FC<TheaterSceneProps> = ({
         onUsherHover={onUsherHover}
         onStageDoorApproach={onStageDoorApproach}
         onPerformerHover={onPerformerHover}
+        onAuditoriumEntry={onAuditoriumEntry}
         auditoriumDoorOpen={auditoriumDoorOpen}
         lobbyDoorOpen={lobbyDoorOpen}
         isSitting={isSitting}

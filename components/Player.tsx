@@ -12,6 +12,7 @@ interface PlayerProps {
   onUsherHover: (isHovering: boolean) => void;
   onStageDoorApproach: (isNear: boolean) => void;
   onPerformerHover: (isHovering: boolean) => void;
+  onAuditoriumEntry: () => void;
   auditoriumDoorOpen: boolean;
   lobbyDoorOpen: boolean;
   isSitting: boolean;
@@ -28,11 +29,11 @@ const Player: React.FC<PlayerProps> = ({
   onUsherHover,
   onStageDoorApproach,
   onPerformerHover,
+  onAuditoriumEntry,
   auditoriumDoorOpen,
   lobbyDoorOpen,
   isSitting,
-  sittingChairId,
-  isCameraActive
+  sittingChairId
 }) => {
   const { camera, scene } = useThree();
   const moveState = useKeyboard();
@@ -45,6 +46,7 @@ const Player: React.FC<PlayerProps> = ({
   const wasNearStageDoor = useRef(false);
   const wasHoveringUsher = useRef(false);
   const wasHoveringPerformer = useRef(false);
+  const prevZ = useRef(0);
   const sitPosition = useRef(new Vector3());
   const lastTarget = useRef<string | null>(null);
   const lastChair = useRef<string | null>(null);
@@ -56,7 +58,8 @@ const Player: React.FC<PlayerProps> = ({
     if (!isSitting) {
        camera.position.y = PLAYER_HEIGHT;
     }
-  }, [isSitting, PLAYER_HEIGHT]);
+    prevZ.current = camera.position.z;
+  }, [isSitting, PLAYER_HEIGHT, camera.position]);
 
   useFrame((state, delta) => {
     if (isSitting && sittingChairId) {
@@ -85,45 +88,26 @@ const Player: React.FC<PlayerProps> = ({
 
     let allowMove = true;
 
-    // 1. Auditorium Door at Z=0
+    // Door collisions
     if (!auditoriumDoorOpen) {
        if (camera.position.z > 0.5 && nextPos.z < 0.5) allowMove = false;
        if (camera.position.z < -0.5 && nextPos.z > -0.5) allowMove = false;
     } else {
        if ((camera.position.z > 0.5 && nextPos.z < 0.5) || (camera.position.z < -0.5 && nextPos.z > -0.5)) {
-         if (Math.abs(nextPos.x) > 1.2) allowMove = false;
+         if (Math.abs(nextPos.x) > 2.5) allowMove = false;
        }
     }
 
-    // 2. Lobby/Exit Door at Z=15
     if (!lobbyDoorOpen) {
       if (camera.position.z < 14.5 && nextPos.z > 14.5) allowMove = false;
       if (camera.position.z > 15.5 && nextPos.z < 15.5) allowMove = false;
     } else {
-      // Physical Door Frame Check
       if ((camera.position.z < 14.8 && nextPos.z > 14.8) || (camera.position.z > 15.2 && nextPos.z < 15.2)) {
-        if (Math.abs(nextPos.x) > 1.2) allowMove = false;
+        if (Math.abs(nextPos.x) > 2.5) allowMove = false;
       }
     }
 
-    // 3. Stage Boundary
-    if (nextPos.z < -15) allowMove = false;
-
-    // 4. Outside Zone (Z > 15.2) - Refined Porch Logic
-    if (nextPos.z > 15.2) {
-      // Transition Porch (15.2 to 16.5): Let player move sideways to reach fan zones
-      if (nextPos.z < 16.5) {
-        // Just standard side boundaries
-        if (Math.abs(nextPos.x) > 7.5) allowMove = false;
-      } else {
-        // Deep Fan Zone: Must be outside the red carpet
-        if (Math.abs(nextPos.x) < 1.8) {
-           allowMove = false;
-        }
-      }
-    }
-
-    // 5. Overall Bounds
+    if (nextPos.z < -20) allowMove = false;
     if (Math.abs(nextPos.x) > 7.5) allowMove = false; 
     if (nextPos.z > 28) allowMove = false; 
 
@@ -135,16 +119,22 @@ const Player: React.FC<PlayerProps> = ({
        camera.position.y = PLAYER_HEIGHT;
     }
 
+    // Auditorium Entry Detection (Crossing Z=0)
+    if (prevZ.current > 0 && camera.position.z <= 0) {
+      onAuditoriumEntry();
+    }
+    prevZ.current = camera.position.z;
+
     // Proximity checks
     const distToAudDoor = camera.position.distanceTo(new Vector3(0, PLAYER_HEIGHT, 0));
-    const nearAud = distToAudDoor < 3;
+    const nearAud = distToAudDoor < 3.5;
     if (nearAud !== wasNearAuditoriumDoor.current) {
       wasNearAuditoriumDoor.current = nearAud;
       onAuditoriumDoorDistanceChange(nearAud);
     }
 
     const distToLobbyDoor = camera.position.distanceTo(new Vector3(0, PLAYER_HEIGHT, 15));
-    const nearLob = distToLobbyDoor < 3;
+    const nearLob = distToLobbyDoor < 3.5;
     if (nearLob !== wasNearLobbyDoor.current) {
       wasNearLobbyDoor.current = nearLob;
       onLobbyDoorDistanceChange(nearLob);
@@ -169,7 +159,6 @@ const Player: React.FC<PlayerProps> = ({
          const hit = intersects[i].object;
          const dist = intersects[i].distance;
          if (dist > 8) continue; 
-         
          if (hit.userData.type === 'poster') foundTarget = hit.name;
          if (hit.userData.type === 'chair') foundChair = hit.name;
          if (hit.userData.type === 'usher') foundUsher = true;
@@ -198,5 +187,4 @@ const Player: React.FC<PlayerProps> = ({
   return null;
 };
 
-// Fix: Add missing default export
 export default Player;

@@ -4,11 +4,20 @@ import { Canvas } from '@react-three/fiber';
 import { PointerLockControls } from '@react-three/drei';
 import TheaterScene from './components/TheaterScene';
 import { Camera, Image as ImageIcon, Scan, Maximize, Zap, X, BookOpen, Star, Loader2, Binoculars, MousePointer2 } from 'lucide-react';
+import { Leva } from 'leva';
 
 // Inventory Item Types
 type ItemType = 'EMPTY' | 'OPERA_GLASS' | 'BOOK' | 'SIGNED_BOOK' | null;
 
 const App: React.FC = () => {
+  // Refs
+  // Fix: Declare all refs at the top of the component to avoid "used before declaration" errors.
+  const controlsRef = useRef<any>(null);
+  const lastActivityRef = useRef<number>(Date.now());
+  const isTabHeldRef = useRef(false);
+  const webcamRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
   // Game State
   const [hasStarted, setHasStarted] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
@@ -18,8 +27,6 @@ const App: React.FC = () => {
   const [hotbar, setHotbar] = useState<ItemType[]>(['EMPTY', 'OPERA_GLASS', null, null, null]);
   const [activeSlot, setActiveSlot] = useState<number>(0);
   const [hotbarOpacity, setHotbarOpacity] = useState(0);
-  const lastActivityRef = useRef<number>(Date.now());
-  const isTabHeldRef = useRef(false);
 
   // Tools & Modes
   const [cameraMode, setCameraMode] = useState(false);
@@ -28,11 +35,10 @@ const App: React.FC = () => {
   const [flash, setFlash] = useState(false);
   const [isZooming, setIsZooming] = useState(false);
 
-  // Camera Passthrough (Webcam)
-  const webcamRef = useRef<HTMLVideoElement>(null);
+  // Performer Randomization
+  const [stagePerformerIndex, setStagePerformerIndex] = useState(0);
 
   // AR Video State
-  const videoRef = useRef<HTMLVideoElement>(null);
   const [videoOpacity, setVideoOpacity] = useState(0);
   const [isVideoLoading, setIsVideoLoading] = useState(false);
   
@@ -44,6 +50,7 @@ const App: React.FC = () => {
 
   // Interaction State
   const [interactionText, setInteractionText] = useState<string | null>(null);
+  const [activeDialogue, setActiveDialogue] = useState<string | null>(null);
   const [targetedPoster, setTargetedPoster] = useState<string | null>(null);
   const [activePoster, setActivePoster] = useState<string | null>(null);
   
@@ -62,13 +69,14 @@ const App: React.FC = () => {
   const [performerArrived, setPerformerArrived] = useState(false);
   const [crowdExcitement, setCrowdExcitement] = useState(false);
 
-  const controlsRef = useRef<any>(null);
-
   // FOV Calculation
   const activeItem = hotbar[activeSlot];
   const isHoldingOperaGlass = activeItem === 'OPERA_GLASS';
   const isHoldingBook = activeItem === 'BOOK' || activeItem === 'SIGNED_BOOK';
   const currentTargetFov = (isHoldingOperaGlass && isZooming) ? 30 : 75;
+
+  // Track activity during render to ensure hotbar stays active while interacting
+  lastActivityRef.current = Date.now();
 
   // Setup Webcam Passthrough
   useEffect(() => {
@@ -121,16 +129,21 @@ const App: React.FC = () => {
     }
   }, [cameraMode, activePoster]);
   
+  // Performer arrival logic
   useEffect(() => {
     if (nearStageDoor && !performerArrived) {
-       const timer = setTimeout(() => {
+       const arrivalTimer = setTimeout(() => {
           setPerformerArrived(true);
           setCrowdExcitement(true);
           setTimeout(() => setCrowdExcitement(false), 5000);
-       }, 3000);
-       return () => clearTimeout(timer);
+       }, 2000);
+       return () => clearTimeout(arrivalTimer);
     }
   }, [nearStageDoor, performerArrived]);
+
+  const handleAuditoriumEntry = useCallback(() => {
+    setStagePerformerIndex(Math.floor(Math.random() * 3));
+  }, []);
 
   const triggerHotbar = useCallback(() => {
     setHotbarOpacity(1);
@@ -156,6 +169,11 @@ const App: React.FC = () => {
     setInventory(prev => [dataUrl, ...prev]);
   }, []);
 
+  const showDialogue = useCallback((text: string, duration: number = 3500) => {
+    setActiveDialogue(text);
+    setTimeout(() => setActiveDialogue(null), duration);
+  }, []);
+
   const receiveBook = useCallback(() => {
     setHotbar(prev => {
       const newHotbar = [...prev];
@@ -164,10 +182,13 @@ const App: React.FC = () => {
     });
     setActiveSlot(2); 
     triggerHotbar();
-  }, [triggerHotbar]);
+    showDialogue("Usher: Here's your program. Don't be late!");
+  }, [triggerHotbar, showDialogue]);
 
   const receiveAutograph = useCallback(() => {
      const bookIndex = hotbar.indexOf('BOOK');
+     const signedBookIndex = hotbar.indexOf('SIGNED_BOOK');
+     
      if (bookIndex !== -1) {
        setHotbar(prev => {
          const newHotbar = [...prev];
@@ -176,9 +197,13 @@ const App: React.FC = () => {
        });
        setActiveSlot(bookIndex);
        triggerHotbar();
-       setInteractionText("Performer: For my #1 fan!");
+       showDialogue("Performer: For my #1 fan! Enjoy the show.");
+     } else if (signedBookIndex !== -1) {
+       showDialogue("Performer: I've already signed your program, dear.");
+     } else {
+       showDialogue("Performer: You should get the program book from the usher and catch the show first!");
      }
-  }, [hotbar, triggerHotbar]);
+  }, [hotbar, triggerHotbar, showDialogue]);
 
   useEffect(() => {
     const handleMouseDown = (e: MouseEvent) => { 
@@ -250,7 +275,8 @@ const App: React.FC = () => {
   }, [isLocked, hasStarted, cameraMode, nearAuditoriumDoor, nearLobbyDoor, targetChair, isSitting, galleryOpen, takePhoto, activeSlot, hotbar, isHoveringUsher, isHoveringPerformer, performerArrived, receiveBook, receiveAutograph, triggerHotbar, isReading, isHoldingBook]);
 
   useEffect(() => {
-    if (isReading) setInteractionText("Click Again or Press [ESC] to Stop Reading");
+    if (activeDialogue) setInteractionText(activeDialogue);
+    else if (isReading) setInteractionText("Click Again or Press [ESC] to Stop Reading");
     else if (isHoldingBook) setInteractionText("Left Click to Read Program");
     else if (isSitting) setInteractionText("Press [F] to Stand");
     else if (targetChair) setInteractionText("Press [F] to Sit");
@@ -259,13 +285,16 @@ const App: React.FC = () => {
     else if (isHoveringUsher) {
        if (hotbar[2] === null) setInteractionText("Press [R] to get Program");
        else setInteractionText("Usher: Enjoy the show.");
-    } else if (isHoveringPerformer && performerArrived) setInteractionText("Press [G] for autograph");
-    else if (nearStageDoor && !performerArrived) setInteractionText("Fans: Is she coming out?");
+    } else if (isHoveringPerformer && performerArrived) {
+       setInteractionText("Press [G] to speak with Performer");
+    } else if (nearStageDoor && !performerArrived) setInteractionText("Fans: Is she coming out?");
     else setInteractionText(null);
-  }, [nearAuditoriumDoor, nearLobbyDoor, auditoriumDoorOpen, lobbyDoorOpen, targetChair, isSitting, isHoveringUsher, isHoveringPerformer, performerArrived, nearStageDoor, hotbar, isReading, isHoldingBook]);
+  }, [nearAuditoriumDoor, nearLobbyDoor, auditoriumDoorOpen, lobbyDoorOpen, targetChair, isSitting, isHoveringUsher, isHoveringPerformer, performerArrived, nearStageDoor, hotbar, isReading, isHoldingBook, activeDialogue]);
 
   return (
     <div className="relative w-full h-full bg-black select-none overflow-hidden font-sans">
+      <Leva hidden={!hasStarted} />
+
       <video ref={webcamRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover z-0 opacity-100" />
 
       <div className={`transition-opacity duration-700 w-full h-full z-10 relative`}>
@@ -278,6 +307,7 @@ const App: React.FC = () => {
             onUsherHover={setIsHoveringUsher}
             onStageDoorApproach={setNearStageDoor}
             onPerformerHover={setIsHoveringPerformer}
+            onAuditoriumEntry={handleAuditoriumEntry}
             highlightedPoster={targetedPoster} 
             auditoriumDoorOpen={auditoriumDoorOpen}
             lobbyDoorOpen={lobbyDoorOpen}
@@ -285,6 +315,7 @@ const App: React.FC = () => {
             sittingChairId={sittingChair}
             isCameraActive={cameraMode}
             performerArrived={performerArrived}
+            stagePerformerIndex={stagePerformerIndex}
             fov={currentTargetFov}
             isVisible={true}
           />
@@ -294,11 +325,9 @@ const App: React.FC = () => {
 
       <div className={`absolute inset-0 bg-white pointer-events-none z-[100] transition-opacity duration-150 ${flash ? 'opacity-100' : 'opacity-0'}`} />
 
-      {/* OPERA GLASS VIGNETTE */}
       <div className={`absolute inset-0 pointer-events-none z-40 bg-black/80 transition-opacity duration-500 ${isZooming && isHoldingOperaGlass ? 'opacity-100' : 'opacity-0'}`}
            style={{ maskImage: 'radial-gradient(circle at center, transparent 35%, black 65%)', WebkitMaskImage: 'radial-gradient(circle at center, transparent 35%, black 65%)' }} />
 
-      {/* PROGRAM READING OVERLAY */}
       {isReading && (
         <div className="absolute inset-0 z-[120] flex items-center justify-center animate-in fade-in duration-300">
            <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setIsReading(false)} />
@@ -420,7 +449,6 @@ const App: React.FC = () => {
              )}
           </div>
 
-          {/* PASSTHROUGH SMARTPHONE (Fixed logic: Idle=Black screen, Camera=Transparent) */}
           <div className={`absolute transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] flex items-center justify-center ${cameraMode ? 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] max-w-[850px] h-[65%] z-50' : 'bottom-[-40px] right-[-40px] w-[240px] h-[380px] rotate-[-10deg]'} ${isReading ? 'opacity-0 scale-50' : ''}`}>
             <div className={`relative border-4 border-zinc-900 shadow-2xl transition-all duration-700 overflow-hidden ${cameraMode ? 'w-full h-full rotate-0 rounded-[30px] border-[12px] border-zinc-900/90 bg-transparent' : 'w-full h-full rounded-[40px] bg-zinc-950'}`}>
               <div className="w-full h-full relative flex flex-col pointer-events-auto bg-transparent">
@@ -431,7 +459,6 @@ const App: React.FC = () => {
                            <div className="w-48 h-48 border border-white/20 rounded-full animate-pulse" />
                            {activePoster && <div className="absolute flex flex-col items-center"><Scan size={120} className="text-white drop-shadow-glow" /><span className="mt-4 bg-white text-black px-4 py-1 text-[10px] font-black uppercase tracking-widest rounded-full">{activePoster}</span></div>}
                         </div>
-                        {/* AR Video Overlay */}
                         <div className="absolute inset-0 z-10 overflow-hidden">
                            {isVideoLoading && <div className="absolute inset-0 flex items-center justify-center bg-black/40"><Loader2 className="animate-spin text-white" /></div>}
                            <video ref={videoRef} className="w-full h-full object-cover transition-opacity duration-500" style={{ opacity: videoOpacity }} loop muted playsInline onPlaying={() => { setIsVideoLoading(false); setVideoOpacity(1); }} />
