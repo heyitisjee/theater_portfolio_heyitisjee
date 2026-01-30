@@ -1,7 +1,6 @@
-
-import React, { useRef, Suspense, useEffect, useState } from 'react';
+import React, { useRef, Suspense, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Mesh, DoubleSide, Object3D, Color, PointLight } from 'three';
+import { DoubleSide, Object3D, PointLight } from 'three';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import * as THREE from 'three';
 
@@ -12,7 +11,59 @@ interface LobbyProps {
   performerArrived?: boolean;
   stagePerformerIndex?: number;
   isNearStageDoor?: boolean;
+  chandelierPos?: [number, number, number];
+  chandelierIntensity?: number;
+  chandelierScale?: number;
+  isHoveringUsher?: boolean;
 }
+
+const USHER_MODEL_URL = 'https://raw.githubusercontent.com/heyitisjee/theater-assets/bd44fe10a9cfa22b5d8935e6b77d2484a0f561dd/talking-v2.glb';
+
+const StaticUsher: React.FC<{ isHovering: boolean }> = ({ isHovering }) => {
+  const groupRef = useRef<THREE.Group>(null);
+  const { scene, animations } = useGLTF(USHER_MODEL_URL);
+  const { actions } = useAnimations(animations, groupRef);
+
+  // Hardcoded values based on previous best positioning
+  const position: [number, number, number] = [4.2, 0.0, 2.0];
+  const rotation: [number, number, number] = [0, -0.8, 0];
+  const scale = 1.3;
+
+  useEffect(() => {
+    scene.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        if (child.material) {
+          child.material.side = THREE.FrontSide;
+          child.material.transparent = false;
+          child.material.depthWrite = true;
+          child.material.depthTest = true;
+          child.material.needsUpdate = true;
+        }
+      }
+    });
+
+    if (actions && Object.keys(actions).length > 0) {
+      const actionName = Object.keys(actions)[0];
+      const action = actions[actionName];
+      if (action) {
+        action.reset().fadeIn(0.5).play();
+        action.setEffectiveTimeScale(1.0); 
+      }
+    }
+  }, [actions, scene]);
+
+  return (
+    <group 
+      ref={groupRef} 
+      position={position} 
+      rotation={rotation}
+      scale={[scale, scale, scale]} 
+      userData={{ type: 'usher' }}
+    >
+      <primitive object={scene} />
+    </group>
+  );
+};
 
 const StageModel: React.FC = () => {
   const { scene } = useGLTF('https://raw.githubusercontent.com/heyitisjee/theater-assets/5b0219c9783e687cfe75d19f05ca43ff9496bb9b/staged-v1.glb');
@@ -66,18 +117,19 @@ const StagePerformer: React.FC<{ index: number }> = ({ index }) => {
 
 const PaparazziFlash: React.FC<{ position: [number, number, number] }> = ({ position }) => {
   const lightRef = useRef<PointLight>(null);
-  const [intensity, setIntensity] = useState(0);
+  const flashIntensity = useRef(0);
 
   useFrame(() => {
-    if (Math.random() > 0.992) {
-      setIntensity(20);
+    if (!lightRef.current) return;
+    if (Math.random() > 0.995) { 
+      flashIntensity.current = 15;
     } else {
-      setIntensity(prev => prev * 0.8);
+      flashIntensity.current *= 0.8;
     }
-    if (lightRef.current) lightRef.current.intensity = intensity;
+    lightRef.current.intensity = flashIntensity.current;
   });
 
-  return <pointLight ref={lightRef} position={position} color="#ffffff" distance={10} />;
+  return <pointLight ref={lightRef} position={position} color="#ffffff" distance={8} />;
 };
 
 const Performer: React.FC = () => {
@@ -85,7 +137,7 @@ const Performer: React.FC = () => {
   const targetZ = 4.0; 
   const startZ = 15.0; 
 
-  useFrame((state, delta) => {
+  useFrame((state) => {
     if (groupRef.current) {
       groupRef.current.position.z = THREE.MathUtils.lerp(groupRef.current.position.z, targetZ, 0.02);
       const walkProgress = Math.abs(groupRef.current.position.z - targetZ);
@@ -107,24 +159,17 @@ const Performer: React.FC = () => {
   );
 };
 
-const Chandelier: React.FC = () => {
+const Chandelier: React.FC<{ position: [number, number, number], intensity: number, scale: number }> = ({ position, intensity, scale }) => {
   const LIGHT_MODEL_URL = 'https://raw.githubusercontent.com/heyitisjee/theater-assets/2a1b1d9ea924eec7f9c28887e328da6dfd12c557/light-v1%20(2).glb';
   const { scene } = useGLTF(LIGHT_MODEL_URL);
-
-  const posX = 0.0;
-  const posY = -3.2;
-  const posZ = -6.2;
-  const scale = 0.8;
-  const lightIntensity = 500.0;
-  const lightDistance = 100.0;
   const lightColor = '#fff4d4';
 
   return (
-    <group position={[posX, posY, posZ]} scale={[scale, scale, scale]}>
+    <group position={position} scale={[scale, scale, scale]}>
       <primitive object={scene} />
       <pointLight 
-        intensity={lightIntensity} 
-        distance={lightDistance} 
+        intensity={intensity} 
+        distance={60} 
         color={lightColor} 
         position={[0, 0, 0]} 
       />
@@ -156,17 +201,34 @@ const TheaterSeat: React.FC<{ position: [number, number, number], name: string }
   );
 };
 
+const AuditoriumWallLight: React.FC<{ position: [number, number, number] }> = ({ position }) => (
+  <group position={position}>
+    <mesh castShadow>
+      <boxGeometry args={[0.1, 0.5, 0.2]} />
+      <meshStandardMaterial color="#222" />
+    </mesh>
+    <mesh position={[position[0] > 0 ? -0.08 : 0.08, 0, 0]}>
+      <sphereGeometry args={[0.1, 16, 16]} />
+      <meshStandardMaterial color="#ffaa44" emissive="#ffaa44" emissiveIntensity={3} />
+    </mesh>
+    <pointLight intensity={8} distance={10} color="#ffcc88" decay={2} />
+  </group>
+);
+
 const Lobby: React.FC<LobbyProps> = ({ 
   highlightedPoster, 
   auditoriumDoorOpen, 
   lobbyDoorOpen, 
   performerArrived,
-  stagePerformerIndex = 0
+  stagePerformerIndex = 0,
+  chandelierPos = [0, -1.2, 7.8], 
+  chandelierIntensity = 80, 
+  chandelierScale = 0.5,
+  isHoveringUsher = false
 }) => {
   const lobbyWidth = 16;
   const lobbyHeight = 8;
   const lobbyDepth = 15; 
-  const audDepth = 25; 
 
   const leftAudDoorRef = useRef<THREE.Group>(null);
   const rightAudDoorRef = useRef<THREE.Group>(null);
@@ -188,9 +250,8 @@ const Lobby: React.FC<LobbyProps> = ({
 
   return (
     <group>
-      <hemisphereLight intensity={0.5} groundColor="#000" color="#ffffff" />
+      <hemisphereLight intensity={0.4} groundColor="#000" color="#ffffff" />
       
-      {/* === LOBBY AREA === */}
       <group position={[0, 0, lobbyDepth / 2]}>
          <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
             <planeGeometry args={[lobbyWidth, lobbyDepth]} />
@@ -247,13 +308,19 @@ const Lobby: React.FC<LobbyProps> = ({
         <mesh position={[1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><meshStandardMaterial color="#eee" /></mesh>
       </group>
 
-      <group position={[0, 0, -audDepth / 2]}>
+      <group position={[0, 0, -12.5]}>
          <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-            <planeGeometry args={[lobbyWidth, audDepth]} />
+            <planeGeometry args={[lobbyWidth, 25]} />
             <meshStandardMaterial color="#050505" />
          </mesh>
-         <pointLight position={[0, 8, 0]} intensity={3.0} distance={40} color="#ffffff" />
-         <pointLight position={[0, 8, -10]} intensity={3.0} distance={40} color="#ffffff" />
+         
+         {[-8, -4, 0, 4, 8].map((zPos) => (
+           <React.Fragment key={`aud-side-lights-${zPos}`}>
+             <AuditoriumWallLight position={[-7.9, 3, zPos]} />
+             <AuditoriumWallLight position={[7.9, 3, zPos]} />
+           </React.Fragment>
+         ))}
+
          <group position={[0, 0, 8]}> 
             {[0, 1, 2].map((row) => {
                const riserHeight = (2 - row) * 0.4;
@@ -273,21 +340,18 @@ const Lobby: React.FC<LobbyProps> = ({
          </group>
          <Suspense fallback={null}>
             <StageModel />
-            <spotLight position={[0, 10, -15]} intensity={25} angle={0.6} penumbra={1} color="#ffffff" />
+            <spotLight position={[0, 10, -15]} intensity={15} angle={0.6} penumbra={1} color="#ffffff" />
             <StagePerformer index={stagePerformerIndex} />
          </Suspense>
       </group>
 
       <Suspense fallback={null}>
-        <Chandelier />
+        <Chandelier position={chandelierPos} intensity={chandelierIntensity} scale={chandelierScale} />
       </Suspense>
 
-      <group position={[3.5, 0, 1.5]}>
-        <mesh position={[0, 1, 0]} userData={{ type: 'usher' }}>
-          <boxGeometry args={[0.5, 2, 0.5]} />
-          <meshStandardMaterial color="#111" />
-        </mesh>
-      </group>
+      <Suspense fallback={null}>
+        <StaticUsher isHovering={isHoveringUsher} />
+      </Suspense>
 
       <group position={[0, 0, 15]}>
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 7.5]}>
@@ -306,18 +370,16 @@ const Lobby: React.FC<LobbyProps> = ({
              <mesh position={[0, 0.5, 0]}><boxGeometry args={[0.2, 1, 15]} /><meshStandardMaterial color="#222" /></mesh>
              <mesh position={[0, 1, 0]}><boxGeometry args={[0.1, 0.1, 15]} /><meshStandardMaterial color="#bbb" metalness={1} roughness={0.1} /></mesh>
           </group>
-          <pointLight position={[0, 7, 5]} intensity={3.0} distance={40} color="#ffffff" />
-          <pointLight position={[-6, 5, 10]} intensity={2.0} distance={20} color="#ffffff" />
-          <pointLight position={[6, 5, 10]} intensity={2.0} distance={20} color="#ffffff" />
+          <pointLight position={[0, 7, 5]} intensity={2.0} distance={30} color="#ffffff" />
           <group position={[0, 0, 0]}>
-             {[...Array(8)].map((_, i) => (
-                <group key={`fan-l-${i}`} position={[-4.5 + Math.random() * -2, 0, 5 + i * 1.5]}>
+             {[...Array(6)].map((_, i) => (
+                <group key={`fan-l-${i}`} position={[-4.5 + Math.random() * -1, 0, 5 + i * 2]}>
                    <mesh position={[0, 1, 0]}><boxGeometry args={[0.5, 2, 0.5]} /><meshStandardMaterial color={`hsl(${Math.random() * 360}, 30%, 20%)`} /></mesh>
                    <PaparazziFlash position={[0, 1.8, 0.2]} />
                 </group>
              ))}
-             {[...Array(8)].map((_, i) => (
-                <group key={`fan-r-${i}`} position={[4.5 + Math.random() * 2, 0, 5 + i * 1.5]}>
+             {[...Array(6)].map((_, i) => (
+                <group key={`fan-r-${i}`} position={[4.5 + Math.random() * 1, 0, 5 + i * 2]}>
                    <mesh position={[0, 1, 0]}><boxGeometry args={[0.5, 2, 0.5]} /><meshStandardMaterial color={`hsl(${Math.random() * 360}, 30%, 20%)`} /></mesh>
                    <PaparazziFlash position={[0, 1.8, -0.2]} />
                 </group>

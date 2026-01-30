@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -22,6 +21,8 @@ interface TheaterSceneProps {
   onStageDoorApproach: (isNear: boolean) => void;
   onPerformerHover: (isHovering: boolean) => void;
   onAuditoriumEntry: () => void;
+  onAuditoriumExit: () => void;
+  onPositionUpdate: (pos: { x: number, y: number, z: number }) => void;
   highlightedPoster: string | null;
   auditoriumDoorOpen: boolean;
   lobbyDoorOpen: boolean;
@@ -32,6 +33,9 @@ interface TheaterSceneProps {
   stagePerformerIndex: number;
   fov?: number;
   isVisible?: boolean;
+  joystickInput?: { x: number, y: number };
+  isTouchDevice?: boolean;
+  isHoveringUsher?: boolean;
 }
 
 const TheaterScene: React.FC<TheaterSceneProps> = ({ 
@@ -43,6 +47,8 @@ const TheaterScene: React.FC<TheaterSceneProps> = ({
   onStageDoorApproach,
   onPerformerHover,
   onAuditoriumEntry,
+  onAuditoriumExit,
+  onPositionUpdate,
   highlightedPoster, 
   auditoriumDoorOpen,
   lobbyDoorOpen,
@@ -52,7 +58,10 @@ const TheaterScene: React.FC<TheaterSceneProps> = ({
   performerArrived,
   stagePerformerIndex,
   fov = 75,
-  isVisible = true
+  isVisible = true,
+  joystickInput = { x: 0, y: 0 },
+  isTouchDevice = false,
+  isHoveringUsher = false
 }) => {
   const { camera } = useThree();
 
@@ -66,12 +75,8 @@ const TheaterScene: React.FC<TheaterSceneProps> = ({
 
   return (
     <group visible={isVisible}>
-      {/* High base visibility */}
       <ambientLight intensity={1.0} color="#ffffff" /> 
-      
       <directionalLight position={[10, 20, 10]} intensity={0.6} castShadow />
-      
-      {/* Pushed fog far back to not hide interior details */}
       <fog attach="fog" args={['#000', 40, 150]} />
       
       <Lobby 
@@ -81,6 +86,10 @@ const TheaterScene: React.FC<TheaterSceneProps> = ({
         performerArrived={performerArrived}
         stagePerformerIndex={stagePerformerIndex}
         isNearStageDoor={true}
+        chandelierPos={[0, -1.2, 7.8]}
+        chandelierIntensity={80}
+        chandelierScale={0.5}
+        isHoveringUsher={isHoveringUsher}
       />
       <Player 
         onTargetChange={onTargetChange} 
@@ -91,12 +100,16 @@ const TheaterScene: React.FC<TheaterSceneProps> = ({
         onStageDoorApproach={onStageDoorApproach}
         onPerformerHover={onPerformerHover}
         onAuditoriumEntry={onAuditoriumEntry}
+        onAuditoriumExit={onAuditoriumExit}
+        onPositionUpdate={onPositionUpdate}
         auditoriumDoorOpen={auditoriumDoorOpen}
         lobbyDoorOpen={lobbyDoorOpen}
         isSitting={isSitting}
         sittingChairId={sittingChairId}
         onSecurityViolation={() => {}}
         isCameraActive={isCameraActive}
+        joystickInput={joystickInput}
+        isTouchDevice={isTouchDevice}
       />
     </group>
   );

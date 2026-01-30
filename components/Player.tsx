@@ -1,7 +1,6 @@
-
 import React, { useRef, useMemo, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { Vector3, Raycaster, Vector2 } from 'three';
+import { Vector3, Raycaster, Vector2, Euler, Object3D } from 'three';
 import { useKeyboard } from '../hooks/useKeyboard';
 
 interface PlayerProps {
@@ -13,12 +12,16 @@ interface PlayerProps {
   onStageDoorApproach: (isNear: boolean) => void;
   onPerformerHover: (isHovering: boolean) => void;
   onAuditoriumEntry: () => void;
+  onAuditoriumExit: () => void;
+  onPositionUpdate: (pos: { x: number, y: number, z: number }) => void;
   auditoriumDoorOpen: boolean;
   lobbyDoorOpen: boolean;
   isSitting: boolean;
   sittingChairId: string | null;
   onSecurityViolation: () => void;
   isCameraActive: boolean;
+  joystickInput?: { x: number, y: number };
+  isTouchDevice?: boolean;
 }
 
 const Player: React.FC<PlayerProps> = ({ 
@@ -30,12 +33,16 @@ const Player: React.FC<PlayerProps> = ({
   onStageDoorApproach,
   onPerformerHover,
   onAuditoriumEntry,
+  onAuditoriumExit,
+  onPositionUpdate,
   auditoriumDoorOpen,
   lobbyDoorOpen,
   isSitting,
-  sittingChairId
+  sittingChairId,
+  joystickInput = { x: 0, y: 0 },
+  isTouchDevice = false
 }) => {
-  const { camera, scene } = useThree();
+  const { camera, scene, gl } = useThree();
   const moveState = useKeyboard();
   const direction = useRef(new Vector3());
   const raycaster = useMemo(() => new Raycaster(), []);
@@ -51,6 +58,10 @@ const Player: React.FC<PlayerProps> = ({
   const lastTarget = useRef<string | null>(null);
   const lastChair = useRef<string | null>(null);
 
+  // Mobile Look Logic
+  const touchStart = useRef({ x: 0, y: 0 });
+  const touchRotation = useRef(new Euler(0, 0, 0, 'YXZ'));
+  
   const PLAYER_HEIGHT = 2.5;
   const SPEED = 5;
 
@@ -59,7 +70,38 @@ const Player: React.FC<PlayerProps> = ({
        camera.position.y = PLAYER_HEIGHT;
     }
     prevZ.current = camera.position.z;
+    touchRotation.current.copy(camera.rotation);
   }, [isSitting, PLAYER_HEIGHT, camera.position]);
+
+  // Touch handlers for looking around
+  useEffect(() => {
+    if (!isTouchDevice) return;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches[0].clientX < window.innerWidth / 3 && e.touches[0].clientY > window.innerHeight / 2) return;
+
+      const dx = e.touches[0].clientX - touchStart.current.x;
+      const dy = e.touches[0].clientY - touchStart.current.y;
+      
+      touchRotation.current.y -= dx * 0.005;
+      touchRotation.current.x -= dy * 0.005;
+      touchRotation.current.x = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, touchRotation.current.x));
+      
+      camera.rotation.copy(touchRotation.current);
+      touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    };
+
+    gl.domElement.addEventListener('touchstart', handleTouchStart);
+    gl.domElement.addEventListener('touchmove', handleTouchMove);
+    return () => {
+      gl.domElement.removeEventListener('touchstart', handleTouchStart);
+      gl.domElement.removeEventListener('touchmove', handleTouchMove);
+    };
+  }, [isTouchDevice, gl, camera]);
 
   useFrame((state, delta) => {
     if (isSitting && sittingChairId) {
@@ -73,8 +115,12 @@ const Player: React.FC<PlayerProps> = ({
     }
 
     direction.current.set(0, 0, 0);
-    const frontVector = new Vector3(0, 0, Number(moveState.backward) - Number(moveState.forward));
-    const sideVector = new Vector3(Number(moveState.left) - Number(moveState.right), 0, 0);
+
+    const moveX = (Number(moveState.left) - Number(moveState.right)) || -joystickInput.x;
+    const moveZ = (Number(moveState.backward) - Number(moveState.forward)) || joystickInput.y;
+
+    const sideVector = new Vector3(moveX, 0, 0);
+    const frontVector = new Vector3(0, 0, moveZ);
 
     direction.current
       .subVectors(frontVector, sideVector)
@@ -119,11 +165,16 @@ const Player: React.FC<PlayerProps> = ({
        camera.position.y = PLAYER_HEIGHT;
     }
 
-    // Auditorium Entry Detection (Crossing Z=0)
+    // Auditorium Entry/Exit Detection (Crossing Z=0)
     if (prevZ.current > 0 && camera.position.z <= 0) {
       onAuditoriumEntry();
+    } else if (prevZ.current <= 0 && camera.position.z > 0) {
+      onAuditoriumExit();
     }
     prevZ.current = camera.position.z;
+
+    // Report Position
+    onPositionUpdate({ x: camera.position.x, y: camera.position.y, z: camera.position.z });
 
     // Proximity checks
     const distToAudDoor = camera.position.distanceTo(new Vector3(0, PLAYER_HEIGHT, 0));
@@ -156,13 +207,31 @@ const Player: React.FC<PlayerProps> = ({
     
     if (intersects.length > 0) {
       for (let i = 0; i < intersects.length; i++) {
-         const hit = intersects[i].object;
          const dist = intersects[i].distance;
-         if (dist > 8) continue; 
-         if (hit.userData.type === 'poster') foundTarget = hit.name;
-         if (hit.userData.type === 'chair') foundChair = hit.name;
-         if (hit.userData.type === 'usher') foundUsher = true;
-         if (hit.userData.type === 'performer') foundPerformer = true;
+         if (dist > 10) continue; 
+
+         let current: Object3D | null = intersects[i].object;
+         while (current) {
+           if (current.userData.type === 'poster') {
+             foundTarget = current.name || current.userData.name;
+             break;
+           }
+           if (current.userData.type === 'chair') {
+             foundChair = current.name;
+             break;
+           }
+           if (current.userData.type === 'usher') {
+             foundUsher = true;
+             break;
+           }
+           if (current.userData.type === 'performer') {
+             foundPerformer = true;
+             break;
+           }
+           current = current.parent;
+         }
+
+         if (foundTarget || foundChair || foundUsher || foundPerformer) break;
       }
     }
 
