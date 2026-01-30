@@ -16,6 +16,8 @@ const PROGRAM_PAGES = [
   "https://raw.githubusercontent.com/heyitisjee/theater-assets/main/5.png"
 ];
 
+const SIGNED_PROGRAM_FIRST_PAGE = "https://raw.githubusercontent.com/heyitisjee/theater-assets/4d5f2760862aafd7a1401227e94afb0f8e6562cb/Hyeji%20Kim%20portfolio%202026.png";
+
 const PAGE_BORDER_COLOR = "#000000";
 
 const App: React.FC = () => {
@@ -58,8 +60,9 @@ const App: React.FC = () => {
   const [flash, setFlash] = useState(false);
   const [isZooming, setIsZooming] = useState(false);
 
-  // Performer Randomization
+  // Performer Arrival and Signing
   const [stagePerformerIndex, setStagePerformerIndex] = useState(0);
+  const [isPerformerSigning, setIsPerformerSigning] = useState(false);
 
   // AR Video State
   const [videoOpacity, setVideoOpacity] = useState(0);
@@ -68,7 +71,10 @@ const App: React.FC = () => {
   const posterVideos: Record<string, string> = {
     'Crimson Specter Poster': 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
     'Emerald Voyage Poster': 'https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-    'Azure Echo Poster': 'https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'
+    'Azure Echo Poster': 'https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+    'Solar Flare Poster': 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4',
+    'Midnight Whispers Poster': 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4',
+    'Golden Odyssey Poster': 'https://storage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4'
   };
 
   // Interaction State
@@ -99,7 +105,27 @@ const App: React.FC = () => {
 
   const isPhoneActive = cameraMode || galleryOpen;
 
-  // Real-time Clock Effect - Updated to 1s for smoother "Real-time" feel
+  // Audio Success Feedback
+  const playAutographSound = () => {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+      osc.frequency.exponentialRampToValueAtTime(1046.50, ctx.currentTime + 0.3); // C6
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.6);
+    } catch (e) {
+      console.warn("Audio Context blocked or failed", e);
+    }
+  };
+
+  // Real-time Clock Effect
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
@@ -109,7 +135,6 @@ const App: React.FC = () => {
 
   const formattedTime = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
   const formattedDate = currentTime.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
-  // Dynamic timezone name (e.g., "Los Angeles" or "London")
   const formattedLocation = Intl.DateTimeFormat().resolvedOptions().timeZone.split('/').pop()?.replace('_', ' ') || 'Local';
 
   useEffect(() => {
@@ -186,13 +211,17 @@ const App: React.FC = () => {
     }
   }, [cameraMode, activePoster]);
   
+  // Performer Arrival Trigger Logic
   useEffect(() => {
     if (nearStageDoor && !performerArrived && hasVisitedAuditorium) {
+       // Trigger the fan excitement first
+       showDialogue("Fan: LOOK! She's coming out! Over here!!", 4000);
+       setCrowdExcitement(true);
+       
        const arrivalTimer = setTimeout(() => {
           setPerformerArrived(true);
-          setCrowdExcitement(true);
-          setTimeout(() => setCrowdExcitement(false), 5000);
-       }, 2000);
+          setTimeout(() => setCrowdExcitement(false), 8000);
+       }, 1500);
        return () => clearTimeout(arrivalTimer);
     }
   }, [nearStageDoor, performerArrived, hasVisitedAuditorium]);
@@ -256,6 +285,10 @@ const App: React.FC = () => {
      const signedBookIndex = hotbar.indexOf('SIGNED_BOOK');
      
      if (bookIndex !== -1) {
+       // Trigger Performer Reactivity
+       setIsPerformerSigning(true);
+       playAutographSound();
+       
        setHotbar(prev => {
          const newHotbar = [...prev];
          newHotbar[bookIndex] = 'SIGNED_BOOK';
@@ -263,11 +296,13 @@ const App: React.FC = () => {
        });
        setActiveSlot(bookIndex);
        triggerHotbar();
-       showDialogue("Performer: For my #1 fan! Enjoy the show.");
+       showDialogue("Performer: Oh, let me sign that for you! There you go!");
+       
+       setTimeout(() => setIsPerformerSigning(false), 2000);
      } else if (signedBookIndex !== -1) {
-       showDialogue("Performer: I've already signed your program, dear.");
+       showDialogue("Performer: I've already signed your program, dear. Have a lovely evening!");
      } else {
-       showDialogue("Performer: You should get the program book from the usher and catch the show first!");
+       showDialogue("Performer: Oh, you don't have a program? Go see the usher inside for one!");
      }
   }, [hotbar, triggerHotbar, showDialogue]);
 
@@ -410,9 +445,9 @@ const App: React.FC = () => {
     } else if (nearAuditoriumDoor && !auditoriumDoorOpen && !isInside) {
        text = "Talk to the Usher to enter"; key = 'usher-needed';
     } else if (isHoveringPerformer && performerArrived) {
-       text = "Press [G] to speak with Performer"; key = 'performer';
+       text = "Press [G] to ask for Autograph"; key = 'performer';
     } else if (nearStageDoor && !performerArrived) { 
-       text = hasVisitedAuditorium ? "Fans: Is she coming out?" : "Stage Door is locked from this side."; key = 'fans'; 
+       text = hasVisitedAuditorium ? "Fans: Is she coming out yet?" : "Stage Door is strictly restricted."; key = 'fans'; 
     }
     else if (isHoldingBook) { text = "Left Click to Read Program"; key = 'book-hint'; }
     else if (isHoldingOperaGlass && !isZooming) { text = "Hold [Z] or Right Click to Zoom"; key = 'zoom-hint'; }
@@ -433,6 +468,8 @@ const App: React.FC = () => {
     setInventory(prev => prev.filter((_, i) => i !== index));
     if (selectedPhotoIndex === index) setSelectedPhotoIndex(null);
   };
+
+  const readingSource = (currentPage === 0 && activeItem === 'SIGNED_BOOK') ? SIGNED_PROGRAM_FIRST_PAGE : PROGRAM_PAGES[currentPage];
 
   return (
     <div className="relative w-full h-full bg-black select-none overflow-hidden font-sans">
@@ -459,11 +496,11 @@ const App: React.FC = () => {
             isCameraActive={cameraMode}
             performerArrived={performerArrived}
             stagePerformerIndex={stagePerformerIndex}
+            isPerformerSigning={isPerformerSigning}
             fov={currentTargetFov}
             isVisible={true}
             joystickInput={joystickPos}
             isTouchDevice={isTouchDevice}
-            isHoveringUsher={isHoveringUsher}
           />
           {!isTouchDevice && <PointerLockControls ref={controlsRef} onLock={() => setIsLocked(true)} onUnlock={() => setIsLocked(false)} />}
         </Canvas>
@@ -491,7 +528,7 @@ const App: React.FC = () => {
                 onClick={(e) => e.stopPropagation()}
               >
                  <img 
-                    src={PROGRAM_PAGES[currentPage]} 
+                    src={readingSource} 
                     className="h-full w-auto object-contain select-none shadow-2xl"
                     alt={`Program Page ${currentPage + 1}`}
                     loading="eager"
@@ -562,7 +599,7 @@ const App: React.FC = () => {
                 </div>
              ) : (activeItem === 'BOOK' || activeItem === 'SIGNED_BOOK') ? (
                 <div className="w-full h-full bg-zinc-900 rounded-t-[50px] border-t-4 border-r-4 border-zinc-800 shadow-2xl overflow-hidden relative">
-                   <img src={PROGRAM_PAGES[0]} className="w-full h-full object-cover opacity-90" />
+                   <img src={activeItem === 'SIGNED_BOOK' ? SIGNED_PROGRAM_FIRST_PAGE : PROGRAM_PAGES[0]} className="w-full h-full object-cover opacity-90" />
                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                 </div>
              ) : (

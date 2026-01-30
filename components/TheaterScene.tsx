@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -31,11 +32,11 @@ interface TheaterSceneProps {
   isCameraActive: boolean;
   performerArrived: boolean;
   stagePerformerIndex: number;
+  isPerformerSigning?: boolean;
   fov?: number;
   isVisible?: boolean;
   joystickInput?: { x: number, y: number };
   isTouchDevice?: boolean;
-  isHoveringUsher?: boolean;
 }
 
 const TheaterScene: React.FC<TheaterSceneProps> = ({ 
@@ -57,11 +58,11 @@ const TheaterScene: React.FC<TheaterSceneProps> = ({
   isCameraActive,
   performerArrived,
   stagePerformerIndex,
+  isPerformerSigning = false,
   fov = 75,
   isVisible = true,
   joystickInput = { x: 0, y: 0 },
-  isTouchDevice = false,
-  isHoveringUsher = false
+  isTouchDevice = false
 }) => {
   const { camera } = useThree();
 
@@ -77,7 +78,6 @@ const TheaterScene: React.FC<TheaterSceneProps> = ({
     <group visible={isVisible}>
       <ambientLight intensity={1.0} color="#ffffff" /> 
       <directionalLight position={[10, 20, 10]} intensity={0.6} castShadow />
-      {/* Fog removed to ensure transparency background works for camera passthrough */}
       
       <Lobby 
         highlightedPoster={highlightedPoster} 
@@ -85,11 +85,11 @@ const TheaterScene: React.FC<TheaterSceneProps> = ({
         lobbyDoorOpen={lobbyDoorOpen}
         performerArrived={performerArrived}
         stagePerformerIndex={stagePerformerIndex}
+        isPerformerSigning={isPerformerSigning}
         isNearStageDoor={true}
         chandelierPos={[0, -1.2, 7.8]}
         chandelierIntensity={80}
         chandelierScale={0.5}
-        isHoveringUsher={isHoveringUsher}
       />
       <Player 
         onTargetChange={onTargetChange} 

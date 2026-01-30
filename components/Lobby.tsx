@@ -11,24 +11,23 @@ interface LobbyProps {
   lobbyDoorOpen?: boolean;
   performerArrived?: boolean;
   stagePerformerIndex?: number;
+  isPerformerSigning?: boolean;
   isNearStageDoor?: boolean;
   chandelierPos?: [number, number, number];
   chandelierIntensity?: number;
   chandelierScale?: number;
-  isHoveringUsher?: boolean;
 }
 
 const USHER_MODEL_URL = 'https://raw.githubusercontent.com/heyitisjee/theater-assets/bd44fe10a9cfa22b5d8935e6b77d2484a0f561dd/talking-v2.glb';
 
-const StaticUsher: React.FC<{ isHovering: boolean }> = ({ isHovering }) => {
+const Usher: React.FC = () => {
   const groupRef = useRef<THREE.Group>(null);
   const { scene, animations } = useGLTF(USHER_MODEL_URL);
   const { actions } = useAnimations(animations, groupRef);
 
-  // Hardcoded values based on previous best positioning
   const position: [number, number, number] = [4.2, 0.0, 2.0];
   const rotation: [number, number, number] = [0, -0.8, 0];
-  const scale = 1.4; // Scaled up by 0.1 from 1.3
+  const scale = 1.4;
 
   useEffect(() => {
     scene.traverse((child) => {
@@ -48,7 +47,7 @@ const StaticUsher: React.FC<{ isHovering: boolean }> = ({ isHovering }) => {
       const action = actions[actionName];
       if (action) {
         action.reset().fadeIn(0.5).play();
-        action.setEffectiveTimeScale(1.0); 
+        action.setEffectiveTimeScale(1.0);
       }
     }
   }, [actions, scene]);
@@ -122,10 +121,10 @@ const PaparazziFlash: React.FC<{ position: [number, number, number] }> = ({ posi
 
   useFrame(() => {
     if (!lightRef.current) return;
-    if (Math.random() > 0.995) { 
-      flashIntensity.current = 15;
+    if (Math.random() > 0.99) { 
+      flashIntensity.current = 18;
     } else {
-      flashIntensity.current *= 0.8;
+      flashIntensity.current *= 0.85;
     }
     lightRef.current.intensity = flashIntensity.current;
   });
@@ -133,28 +132,43 @@ const PaparazziFlash: React.FC<{ position: [number, number, number] }> = ({ posi
   return <pointLight ref={lightRef} position={position} color="#ffffff" distance={8} />;
 };
 
-const Performer: React.FC = () => {
+const Performer: React.FC<{ isSigning: boolean }> = ({ isSigning }) => {
   const groupRef = useRef<THREE.Group>(null);
-  const targetZ = 4.0; 
-  const startZ = 15.0; 
+  const targetZ = 3.0; 
+  const startZ = 12.0; 
 
   useFrame((state) => {
     if (groupRef.current) {
-      groupRef.current.position.z = THREE.MathUtils.lerp(groupRef.current.position.z, targetZ, 0.02);
+      // Walk towards the player on red carpet
+      groupRef.current.position.z = THREE.MathUtils.lerp(groupRef.current.position.z, targetZ, 0.015);
+      
       const walkProgress = Math.abs(groupRef.current.position.z - targetZ);
-      if (walkProgress > 0.1) {
-         groupRef.current.position.y = Math.sin(state.clock.elapsedTime * 6) * 0.08;
+      if (walkProgress > 0.05) {
+         // Bobbing while walking
+         groupRef.current.position.y = Math.sin(state.clock.elapsedTime * 6) * 0.08 + 1.2;
       } else {
-         groupRef.current.position.y = THREE.MathUtils.lerp(groupRef.current.position.y, 0, 0.1);
+         groupRef.current.position.y = THREE.MathUtils.lerp(groupRef.current.position.y, 1.2, 0.1);
+      }
+
+      // Interaction reaction
+      if (isSigning) {
+        groupRef.current.scale.lerp(new THREE.Vector3(1.2, 1.2, 1.2), 0.1);
+      } else {
+        groupRef.current.scale.lerp(new THREE.Vector3(1, 1, 1), 0.1);
       }
     }
   });
 
   return (
-    <group ref={groupRef} position={[0, 0, startZ]}>
-       <mesh position={[0, 1.2, 0]} userData={{ type: 'performer' }}>
-          <capsuleGeometry args={[0.4, 1.2, 4, 8]} />
-          <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={3} />
+    <group ref={groupRef} position={[0, 1.2, startZ]} userData={{ type: 'performer' }}>
+       {/* Simple placeholding box as requested */}
+       <mesh castShadow>
+          <boxGeometry args={[0.8, 2.4, 0.5]} />
+          <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={0.5} />
+       </mesh>
+       <mesh position={[0, 1.6, 0.3]}>
+          <boxGeometry args={[0.4, 0.4, 0.2]} />
+          <meshStandardMaterial color="#222" />
        </mesh>
     </group>
   );
@@ -172,12 +186,8 @@ const Chandelier: React.FC<{ position: [number, number, number], scale: number }
           child.receiveShadow = true;
           
           if (child.material) {
-            // We only set DoubleSide to ensure internal structures aren't invisible
             child.material.side = THREE.DoubleSide;
-            
             if (child.material instanceof THREE.MeshStandardMaterial) {
-              // DRASTICALLY reduced to 0.02 to allow textures to show.
-              // We no longer force the emissive color to pure white.
               child.material.emissiveIntensity = 0.02;
               child.material.needsUpdate = true;
             }
@@ -190,7 +200,6 @@ const Chandelier: React.FC<{ position: [number, number, number], scale: number }
   return (
     <group position={position} scale={[scale, scale, scale]}>
       <primitive object={scene} />
-      {/* Point light in the center provides scene illumination without washing out the model */}
       <pointLight 
         position={[0, 0, 0]} 
         intensity={80} 
@@ -246,9 +255,9 @@ const Lobby: React.FC<LobbyProps> = ({
   lobbyDoorOpen, 
   performerArrived,
   stagePerformerIndex = 0,
+  isPerformerSigning = false,
   chandelierPos = [0, -1.2, 7.8], 
-  chandelierScale = 0.5,
-  isHoveringUsher = false
+  chandelierScale = 0.5
 }) => {
   const lobbyWidth = 16;
   const lobbyHeight = 8;
@@ -262,13 +271,15 @@ const Lobby: React.FC<LobbyProps> = ({
   useFrame(() => {
     if (leftAudDoorRef.current && rightAudDoorRef.current) {
       const targetRot = auditoriumDoorOpen ? -Math.PI / 1.6 : 0;
-      leftAudDoorRef.current.rotation.y += (targetRot - leftAudDoorRef.current.rotation.y) * 0.1;
-      rightAudDoorRef.current.rotation.y += (-targetRot - rightAudDoorRef.current.rotation.y) * 0.1;
+      const audSpeed = auditoriumDoorOpen ? 0.1 : 0.035; 
+      leftAudDoorRef.current.rotation.y += (targetRot - leftAudDoorRef.current.rotation.y) * audSpeed;
+      rightAudDoorRef.current.rotation.y += (-targetRot - rightAudDoorRef.current.rotation.y) * audSpeed;
     }
     if (leftLobbyDoorRef.current && rightLobbyDoorRef.current) {
       const targetRot = lobbyDoorOpen ? Math.PI / 1.6 : 0;
-      leftLobbyDoorRef.current.rotation.y += (targetRot - leftLobbyDoorRef.current.rotation.y) * 0.1;
-      rightLobbyDoorRef.current.rotation.y += (-targetRot - rightLobbyDoorRef.current.rotation.y) * 0.1;
+      const lobSpeed = lobbyDoorOpen ? 0.1 : 0.05;
+      leftLobbyDoorRef.current.rotation.y += (targetRot - leftLobbyDoorRef.current.rotation.y) * lobSpeed;
+      rightLobbyDoorRef.current.rotation.y += (-targetRot - rightLobbyDoorRef.current.rotation.y) * lobSpeed;
     }
   });
 
@@ -289,17 +300,33 @@ const Lobby: React.FC<LobbyProps> = ({
             <planeGeometry args={[lobbyDepth, lobbyHeight]} />
             <meshStandardMaterial color="#ffffff" side={DoubleSide} />
          </mesh>
-         <mesh name="Crimson Specter Poster" userData={{ type: 'poster' }} position={[-lobbyWidth / 2 + 0.1, 1.7, -2]} rotation={[0, Math.PI / 2, 0]}>
+
+         {/* POSTERS - LEFT WALL */}
+         <mesh name="Crimson Specter Poster" userData={{ type: 'poster' }} position={[-lobbyWidth / 2 + 0.1, 1.7, -4]} rotation={[0, Math.PI / 2, 0]}>
             <planeGeometry args={[2, 3]} />
-            <meshStandardMaterial color="#900" emissive="#f00" emissiveIntensity={highlightedPoster === "Crimson Specter Poster" ? 1.0 : 0} />
+            <meshStandardMaterial color="#900" emissive="#f00" emissiveIntensity={highlightedPoster === "Crimson Specter Poster" ? 1.0 : 0.2} />
          </mesh>
-         <mesh name="Emerald Voyage Poster" userData={{ type: 'poster' }} position={[lobbyWidth / 2 - 0.1, 1.7, 0]} rotation={[0, -Math.PI / 2, 0]}>
+         <mesh name="Azure Echo Poster" userData={{ type: 'poster' }} position={[-lobbyWidth / 2 + 0.1, 1.7, 0]} rotation={[0, Math.PI / 2, 0]}>
             <planeGeometry args={[2, 3]} />
-            <meshStandardMaterial color="#060" emissive="#0f0" emissiveIntensity={highlightedPoster === "Emerald Voyage Poster" ? 1.0 : 0} />
+            <meshStandardMaterial color="#006" emissive="#00f" emissiveIntensity={highlightedPoster === "Azure Echo Poster" ? 1.2 : 0.2} />
          </mesh>
-         <mesh name="Azure Echo Poster" userData={{ type: 'poster' }} position={[-lobbyWidth / 2 + 0.1, 1.7, 2]} rotation={[0, Math.PI / 2, 0]}>
+         <mesh name="Midnight Whispers Poster" userData={{ type: 'poster' }} position={[-lobbyWidth / 2 + 0.1, 1.7, 4]} rotation={[0, Math.PI / 2, 0]}>
             <planeGeometry args={[2, 3]} />
-            <meshStandardMaterial color="#006" emissive="#00f" emissiveIntensity={highlightedPoster === "Azure Echo Poster" ? 1.2 : 0} />
+            <meshStandardMaterial color="#404" emissive="#a0a" emissiveIntensity={highlightedPoster === "Midnight Whispers Poster" ? 1.0 : 0.2} />
+         </mesh>
+
+         {/* POSTERS - RIGHT WALL */}
+         <mesh name="Emerald Voyage Poster" userData={{ type: 'poster' }} position={[lobbyWidth / 2 - 0.1, 1.7, -4]} rotation={[0, -Math.PI / 2, 0]}>
+            <planeGeometry args={[2, 3]} />
+            <meshStandardMaterial color="#060" emissive="#0f0" emissiveIntensity={highlightedPoster === "Emerald Voyage Poster" ? 1.0 : 0.2} />
+         </mesh>
+         <mesh name="Solar Flare Poster" userData={{ type: 'poster' }} position={[lobbyWidth / 2 - 0.1, 1.7, 0]} rotation={[0, -Math.PI / 2, 0]}>
+            <planeGeometry args={[2, 3]} />
+            <meshStandardMaterial color="#630" emissive="#f90" emissiveIntensity={highlightedPoster === "Solar Flare Poster" ? 1.2 : 0.2} />
+         </mesh>
+         <mesh name="Golden Odyssey Poster" userData={{ type: 'poster' }} position={[lobbyWidth / 2 - 0.1, 1.7, 4]} rotation={[0, -Math.PI / 2, 0]}>
+            <planeGeometry args={[2, 3]} />
+            <meshStandardMaterial color="#650" emissive="#ff0" emissiveIntensity={highlightedPoster === "Golden Odyssey Poster" ? 1.0 : 0.2} />
          </mesh>
       </group>
 
@@ -374,7 +401,7 @@ const Lobby: React.FC<LobbyProps> = ({
       </Suspense>
 
       <Suspense fallback={null}>
-        <StaticUsher isHovering={isHoveringUsher} />
+        <Usher />
       </Suspense>
 
       <group position={[0, 0, 15]}>
@@ -411,8 +438,8 @@ const Lobby: React.FC<LobbyProps> = ({
           </group>
           
           {performerArrived && (
-            <group visible={lobbyDoorOpen}>
-               <Performer />
+            <group>
+               <Performer isSigning={isPerformerSigning} />
             </group>
           )}
       </group>
