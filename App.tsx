@@ -9,7 +9,7 @@ import { Camera, Image as ImageIcon, Scan, Maximize, Zap, X, BookOpen, Star, Loa
 type ItemType = 'EMPTY' | 'OPERA_GLASS' | 'BOOK' | 'SIGNED_BOOK' | null;
 
 const PROGRAM_PAGES = [
-  "https://raw.githubusercontent.com/heyitisjee/theater-assets/main/1.png",
+  "https://raw.githubusercontent.com/heyitisjee/theater-assets/b1960f5ef0a3ec18401b799b50491f642393eb17/1.png",
   "https://raw.githubusercontent.com/heyitisjee/theater-assets/main/2.png",
   "https://raw.githubusercontent.com/heyitisjee/theater-assets/main/3.png",
   "https://raw.githubusercontent.com/heyitisjee/theater-assets/aa423786de2867da409b338855f8f990476fe518/4.png", 

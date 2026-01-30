@@ -2,7 +2,7 @@
 import React, { useRef, Suspense, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { DoubleSide, Object3D, PointLight } from 'three';
-import { useGLTF, useAnimations } from '@react-three/drei';
+import { useGLTF, useAnimations, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 
 interface LobbyProps {
@@ -268,6 +268,16 @@ const Lobby: React.FC<LobbyProps> = ({
   const leftLobbyDoorRef = useRef<THREE.Group>(null);
   const rightLobbyDoorRef = useRef<THREE.Group>(null);
 
+  // Load Poster Textures
+  const posterTextures = useTexture([
+    "https://raw.githubusercontent.com/heyitisjee/theater-assets/b1960f5ef0a3ec18401b799b50491f642393eb17/poster1.png",
+    "https://raw.githubusercontent.com/heyitisjee/theater-assets/main/poster2.png",
+    "https://raw.githubusercontent.com/heyitisjee/theater-assets/main/poster3.png",
+    "https://raw.githubusercontent.com/heyitisjee/theater-assets/main/poster4.png",
+    "https://raw.githubusercontent.com/heyitisjee/theater-assets/main/poster5.png",
+    "https://raw.githubusercontent.com/heyitisjee/theater-assets/main/poster6.png"
+  ]);
+
   useFrame(() => {
     if (leftAudDoorRef.current && rightAudDoorRef.current) {
       const targetRot = auditoriumDoorOpen ? -Math.PI / 1.6 : 0;
@@ -301,32 +311,32 @@ const Lobby: React.FC<LobbyProps> = ({
             <meshStandardMaterial color="#ffffff" side={DoubleSide} />
          </mesh>
 
-         {/* POSTERS - LEFT WALL */}
+         {/* POSTERS - LEFT WALL (Consecutive 1, 2, 3) */}
          <mesh name="Crimson Specter Poster" userData={{ type: 'poster' }} position={[-lobbyWidth / 2 + 0.1, 1.7, -4]} rotation={[0, Math.PI / 2, 0]}>
             <planeGeometry args={[2, 3]} />
-            <meshStandardMaterial color="#900" emissive="#f00" emissiveIntensity={highlightedPoster === "Crimson Specter Poster" ? 1.0 : 0.2} />
+            <meshStandardMaterial map={posterTextures[0]} emissive="#ffffff" emissiveMap={posterTextures[0]} emissiveIntensity={highlightedPoster === "Crimson Specter Poster" ? 0.8 : 0.1} />
          </mesh>
          <mesh name="Azure Echo Poster" userData={{ type: 'poster' }} position={[-lobbyWidth / 2 + 0.1, 1.7, 0]} rotation={[0, Math.PI / 2, 0]}>
             <planeGeometry args={[2, 3]} />
-            <meshStandardMaterial color="#006" emissive="#00f" emissiveIntensity={highlightedPoster === "Azure Echo Poster" ? 1.2 : 0.2} />
+            <meshStandardMaterial map={posterTextures[1]} emissive="#ffffff" emissiveMap={posterTextures[1]} emissiveIntensity={highlightedPoster === "Azure Echo Poster" ? 0.8 : 0.1} />
          </mesh>
          <mesh name="Midnight Whispers Poster" userData={{ type: 'poster' }} position={[-lobbyWidth / 2 + 0.1, 1.7, 4]} rotation={[0, Math.PI / 2, 0]}>
             <planeGeometry args={[2, 3]} />
-            <meshStandardMaterial color="#404" emissive="#a0a" emissiveIntensity={highlightedPoster === "Midnight Whispers Poster" ? 1.0 : 0.2} />
+            <meshStandardMaterial map={posterTextures[2]} emissive="#ffffff" emissiveMap={posterTextures[2]} emissiveIntensity={highlightedPoster === "Midnight Whispers Poster" ? 0.8 : 0.1} />
          </mesh>
 
-         {/* POSTERS - RIGHT WALL */}
+         {/* POSTERS - RIGHT WALL (Consecutive 4, 5, 6) */}
          <mesh name="Emerald Voyage Poster" userData={{ type: 'poster' }} position={[lobbyWidth / 2 - 0.1, 1.7, -4]} rotation={[0, -Math.PI / 2, 0]}>
             <planeGeometry args={[2, 3]} />
-            <meshStandardMaterial color="#060" emissive="#0f0" emissiveIntensity={highlightedPoster === "Emerald Voyage Poster" ? 1.0 : 0.2} />
+            <meshStandardMaterial map={posterTextures[3]} emissive="#ffffff" emissiveMap={posterTextures[3]} emissiveIntensity={highlightedPoster === "Emerald Voyage Poster" ? 0.8 : 0.1} />
          </mesh>
          <mesh name="Solar Flare Poster" userData={{ type: 'poster' }} position={[lobbyWidth / 2 - 0.1, 1.7, 0]} rotation={[0, -Math.PI / 2, 0]}>
             <planeGeometry args={[2, 3]} />
-            <meshStandardMaterial color="#630" emissive="#f90" emissiveIntensity={highlightedPoster === "Solar Flare Poster" ? 1.2 : 0.2} />
+            <meshStandardMaterial map={posterTextures[4]} emissive="#ffffff" emissiveMap={posterTextures[4]} emissiveIntensity={highlightedPoster === "Solar Flare Poster" ? 0.8 : 0.1} />
          </mesh>
          <mesh name="Golden Odyssey Poster" userData={{ type: 'poster' }} position={[lobbyWidth / 2 - 0.1, 1.7, 4]} rotation={[0, -Math.PI / 2, 0]}>
             <planeGeometry args={[2, 3]} />
-            <meshStandardMaterial color="#650" emissive="#ff0" emissiveIntensity={highlightedPoster === "Golden Odyssey Poster" ? 1.0 : 0.2} />
+            <meshStandardMaterial map={posterTextures[5]} emissive="#ffffff" emissiveMap={posterTextures[5]} emissiveIntensity={highlightedPoster === "Golden Odyssey Poster" ? 0.8 : 0.1} />
          </mesh>
       </group>
 
