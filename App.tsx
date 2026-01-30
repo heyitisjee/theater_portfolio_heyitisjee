@@ -3,7 +3,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { PointerLockControls } from '@react-three/drei';
 import TheaterScene from './components/TheaterScene';
-import { Camera, Image as ImageIcon, Scan, Maximize, Zap, X, BookOpen, Star, Loader2, Binoculars, MousePointer2, ChevronRight, ChevronLeft, Trash2, Settings2, Sliders } from 'lucide-react';
+import { Camera, Image as ImageIcon, Scan, Maximize, Zap, X, BookOpen, Star, Loader2, Binoculars, MousePointer2, ChevronRight, ChevronLeft, Trash2 } from 'lucide-react';
 
 // Inventory Item Types
 type ItemType = 'EMPTY' | 'OPERA_GLASS' | 'BOOK' | 'SIGNED_BOOK' | null;
@@ -19,6 +19,7 @@ const PROGRAM_PAGES = [
 const PAGE_BORDER_COLOR = "#000000";
 
 const App: React.FC = () => {
+  // Refs
   const controlsRef = useRef<any>(null);
   const lastActivityRef = useRef<number>(Date.now());
   const isTabHeldRef = useRef(false);
@@ -28,6 +29,7 @@ const App: React.FC = () => {
   const lastInteractionKeyRef = useRef<string | null>(null);
   const playerPositionRef = useRef({ x: 0, y: 0, z: 0 });
 
+  // Game State
   const [hasStarted, setHasStarted] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [isReading, setIsReading] = useState(false);
@@ -36,13 +38,19 @@ const App: React.FC = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [hasVisitedAuditorium, setHasVisitedAuditorium] = useState(false);
 
+  // Time State
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Mobile Movement State
   const [joystickPos, setJoystickPos] = useState({ x: 0, y: 0 });
   const [isMovingJoystick, setIsMovingJoystick] = useState(false);
   
+  // Hotbar State
   const [hotbar, setHotbar] = useState<ItemType[]>(['EMPTY', 'OPERA_GLASS', null, null, null]);
   const [activeSlot, setActiveSlot] = useState<number>(0);
   const [hotbarOpacity, setHotbarOpacity] = useState(0);
 
+  // Tools & Modes
   const [cameraMode, setCameraMode] = useState(false);
   const [inventory, setInventory] = useState<string[]>([]);
   const [galleryOpen, setGalleryOpen] = useState(false);
@@ -50,16 +58,10 @@ const App: React.FC = () => {
   const [flash, setFlash] = useState(false);
   const [isZooming, setIsZooming] = useState(false);
 
+  // Performer Randomization
   const [stagePerformerIndex, setStagePerformerIndex] = useState(0);
 
-  // Chandelier Control State - Values calibrated as requested
-  const [chanIntensity, setChanIntensity] = useState(580);
-  const [chanY, setChanY] = useState(-1.4);
-  const [chanX, setChanX] = useState(0);
-  const [chanZ, setChanZ] = useState(7.5);
-  const [chanScale, setChanScale] = useState(0.5);
-  const [showControls, setShowControls] = useState(true);
-
+  // AR Video State
   const [videoOpacity, setVideoOpacity] = useState(0);
   const [isVideoLoading, setIsVideoLoading] = useState(false);
   
@@ -69,6 +71,7 @@ const App: React.FC = () => {
     'Azure Echo Poster': 'https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'
   };
 
+  // Interaction State
   const [interactionText, setInteractionText] = useState<string | null>(null);
   const [activeDialogue, setActiveDialogue] = useState<string | null>(null);
   const [targetedPoster, setTargetedPoster] = useState<string | null>(null);
@@ -95,6 +98,19 @@ const App: React.FC = () => {
   const currentTargetFov = (isHoldingOperaGlass && isZooming) ? 30 : 75;
 
   const isPhoneActive = cameraMode || galleryOpen;
+
+  // Real-time Clock Effect - Updated to 1s for smoother "Real-time" feel
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000); 
+    return () => clearInterval(timer);
+  }, []);
+
+  const formattedTime = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  const formattedDate = currentTime.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+  // Dynamic timezone name (e.g., "Los Angeles" or "London")
+  const formattedLocation = Intl.DateTimeFormat().resolvedOptions().timeZone.split('/').pop()?.replace('_', ' ') || 'Local';
 
   useEffect(() => {
     const handleActivity = () => { lastActivityRef.current = Date.now(); };
@@ -187,11 +203,7 @@ const App: React.FC = () => {
 
   const handleAuditoriumEntry = useCallback(() => {
     setHasVisitedAuditorium(true);
-    setStagePerformerIndex(prev => {
-      let next = Math.floor(Math.random() * 3);
-      if (next === prev) next = (prev + 1) % 3;
-      return next;
-    });
+    setStagePerformerIndex(Math.floor(Math.random() * 3));
   }, []);
 
   const handleAuditoriumExit = useCallback(() => {
@@ -325,7 +337,6 @@ const App: React.FC = () => {
       if (e.code === 'Tab') { e.preventDefault(); isTabHeldRef.current = true; triggerHotbar(); }
       switch(e.code) {
         case 'KeyZ': setIsZooming(true); break;
-        case 'KeyK': setShowControls(prev => !prev); break;
         case 'KeyC': 
             if (!galleryOpen && !isReading) {
                 setCameraMode(prev => {
@@ -453,80 +464,10 @@ const App: React.FC = () => {
             joystickInput={joystickPos}
             isTouchDevice={isTouchDevice}
             isHoveringUsher={isHoveringUsher}
-            chandelierPos={[chanX, chanY, chanZ]}
-            chandelierIntensity={chanIntensity}
-            chandelierScale={chanScale}
           />
           {!isTouchDevice && <PointerLockControls ref={controlsRef} onLock={() => setIsLocked(true)} onUnlock={() => setIsLocked(false)} />}
         </Canvas>
       </div>
-
-      {/* Chandelier Control Panel UI */}
-      {hasStarted && (
-        <div className={`absolute left-8 top-1/2 -translate-y-1/2 z-[100] transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${showControls ? 'translate-x-0' : '-translate-x-[calc(100%-20px)]'}`}>
-           <div className="bg-black/80 backdrop-blur-xl border border-white/10 rounded-3xl p-6 w-[280px] shadow-2xl relative">
-              <button 
-                onClick={() => setShowControls(!showControls)}
-                className="absolute -right-4 top-1/2 -translate-y-1/2 w-10 h-20 bg-zinc-900 border border-white/10 rounded-full flex items-center justify-center text-white hover:bg-zinc-800 transition-colors cursor-pointer"
-              >
-                {showControls ? <ChevronLeft size={20} /> : <Sliders size={18} className="translate-x-1" />}
-              </button>
-
-              <div className="flex items-center gap-3 mb-8 border-b border-white/5 pb-4">
-                 <Settings2 size={16} className="text-zinc-500" />
-                 <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-white">Chandelier Panel</h2>
-              </div>
-
-              <div className="space-y-6">
-                 <div>
-                    <div className="flex justify-between mb-2">
-                       <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500">Intensity</label>
-                       <span className="text-[10px] text-white font-mono">{chanIntensity}</span>
-                    </div>
-                    <input type="range" min="0" max="3000" step="10" value={chanIntensity} onChange={(e) => setChanIntensity(Number(e.target.value))} className="w-full accent-white h-1 bg-white/10 rounded-full appearance-none cursor-pointer" />
-                 </div>
-
-                 <div>
-                    <div className="flex justify-between mb-2">
-                       <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500">Height (Y)</label>
-                       <span className="text-[10px] text-white font-mono">{chanY.toFixed(1)}m</span>
-                    </div>
-                    <input type="range" min="-10" max="10" step="0.1" value={chanY} onChange={(e) => setChanY(Number(e.target.value))} className="w-full accent-white h-1 bg-white/10 rounded-full appearance-none cursor-pointer" />
-                 </div>
-
-                 <div className="grid grid-cols-2 gap-4">
-                    <div>
-                       <div className="flex justify-between mb-2">
-                          <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500">Pos X</label>
-                          <span className="text-[10px] text-white font-mono">{chanX.toFixed(1)}</span>
-                       </div>
-                       <input type="range" min="-7" max="7" step="0.1" value={chanX} onChange={(e) => setChanX(Number(e.target.value))} className="w-full accent-white h-1 bg-white/10 rounded-full appearance-none cursor-pointer" />
-                    </div>
-                    <div>
-                       <div className="flex justify-between mb-2">
-                          <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500">Pos Z</label>
-                          <span className="text-[10px] text-white font-mono">{chanZ.toFixed(1)}</span>
-                       </div>
-                       <input type="range" min="1" max="14" step="0.1" value={chanZ} onChange={(e) => setChanZ(Number(e.target.value))} className="w-full accent-white h-1 bg-white/10 rounded-full appearance-none cursor-pointer" />
-                    </div>
-                 </div>
-
-                 <div>
-                    <div className="flex justify-between mb-2">
-                       <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500">Scale</label>
-                       <span className="text-[10px] text-white font-mono">x{chanScale.toFixed(2)}</span>
-                    </div>
-                    <input type="range" min="0.2" max="3.0" step="0.05" value={chanScale} onChange={(e) => setChanScale(Number(e.target.value))} className="w-full accent-white h-1 bg-white/10 rounded-full appearance-none cursor-pointer" />
-                 </div>
-              </div>
-
-              <div className="mt-8 pt-4 border-t border-white/5 flex justify-between items-center opacity-30">
-                 <span className="text-[8px] font-black tracking-widest uppercase text-white">Stage Management HUD</span>
-                 <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              </div>
-           </div>
-        </div>
-      )}
 
       <div className={`absolute inset-0 bg-white pointer-events-none z-[100] transition-opacity duration-150 ${flash ? 'opacity-100' : 'opacity-0'}`} />
 
@@ -557,30 +498,15 @@ const App: React.FC = () => {
                  />
                  
                  <div className="absolute inset-0 flex justify-between items-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    <button 
-                       onClick={prevPage}
-                       className="p-4 bg-black/40 text-white rounded-r-full hover:bg-black/60 transition-colors pointer-events-auto ml-2"
-                    >
-                       <ChevronLeft size={48} />
-                    </button>
-                    <button 
-                       onClick={nextPage}
-                       className="p-4 bg-black/40 text-white rounded-l-full hover:bg-black/60 transition-colors pointer-events-auto mr-2"
-                    >
-                       <ChevronRight size={48} />
-                    </button>
+                    <button onClick={prevPage} className="p-4 bg-black/40 text-white rounded-r-full hover:bg-black/60 transition-colors pointer-events-auto ml-2"><ChevronLeft size={48} /></button>
+                    <button onClick={nextPage} className="p-4 bg-black/40 text-white rounded-l-full hover:bg-black/60 transition-colors pointer-events-auto mr-2"><ChevronRight size={48} /></button>
                  </div>
 
                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-black/60 rounded-full text-white/60 text-[10px] font-black uppercase tracking-[0.3em]">
                     Page {currentPage + 1} / {PROGRAM_PAGES.length}
                  </div>
               </div>
-              <button 
-                onClick={() => setIsReading(false)}
-                className="mt-6 px-10 py-3 bg-white text-black font-black uppercase text-[10px] tracking-widest rounded-full hover:scale-105 transition-transform"
-              >
-                Close Program
-              </button>
+              <button onClick={() => setIsReading(false)} className="mt-6 px-10 py-3 bg-white text-black font-black uppercase text-[10px] tracking-widest rounded-full hover:scale-105 transition-transform">Close Program</button>
            </div>
         </div>
       )}
@@ -588,9 +514,9 @@ const App: React.FC = () => {
       {!hasStarted && (
         <div className="absolute inset-0 flex items-center justify-center z-[150] bg-zinc-950">
           <div className="text-center p-6 sm:p-12 max-w-lg">
-            <h1 className="text-5xl sm:text-7xl font-black mb-4 text-white tracking-tighter uppercase text-glow">THEATER</h1>
+            <h1 className="text-5xl sm:text-7xl font-black mb-4 text-white tracking-tighter uppercase">THEATER</h1>
             <div className="w-24 h-1 bg-white mx-auto mb-8"></div>
-            <p className="text-zinc-500 mb-10 text-[10px] uppercase tracking-[0.3em] leading-loose">The Obsidian Velvet Lobby</p>
+            <p className="text-zinc-500 mb-10 text-[10px] uppercase tracking-[0.3em] leading-loose">White Lobby | Black Auditorium</p>
             <div className="flex flex-col gap-4">
               <button className="px-12 py-5 bg-white text-black font-black hover:scale-105 transition-transform uppercase tracking-[0.2em] text-[10px] shadow-2xl" 
                       onClick={() => { setHasStarted(true); if (!isTouchDevice) controlsRef.current?.lock(); else setIsLocked(true); }}>Enter Theater</button>
@@ -614,7 +540,7 @@ const App: React.FC = () => {
       )}
 
       {interactionText && !isPhoneActive && (
-        <div className="absolute top-[65%] left-1/2 -translate-x-1/2 z-90 pointer-events-none">
+        <div className="absolute top-[65%] left-1/2 -translate-x-1/2 z-[90] pointer-events-none">
           <div className="bg-white/90 backdrop-blur-md text-black px-6 py-3 rounded-full text-[10px] font-black uppercase tracking-widest shadow-2xl animate-in fade-in zoom-in duration-500">{interactionText}</div>
         </div>
       )}
@@ -659,18 +585,15 @@ const App: React.FC = () => {
                         <div className="absolute top-4 right-4 w-8 h-8 border-t-2 border-r-2 border-white/40" />
                         <div className="absolute bottom-4 left-4 w-8 h-8 border-b-2 border-l-2 border-white/40" />
                         <div className="absolute bottom-4 right-4 w-8 h-8 border-b-2 border-r-2 border-white/40" />
-
                         <div className="absolute inset-0 flex items-center justify-center">
                            <div className="w-48 h-48 border border-white/20 rounded-full animate-pulse" />
                            {activePoster && <div className="absolute flex flex-col items-center"><Scan size={120} className="text-white drop-shadow-glow" /><span className="mt-4 bg-white text-black px-4 py-1 text-[10px] font-black uppercase tracking-widest rounded-full">{activePoster}</span></div>}
                         </div>
-                        
                         <div className="absolute inset-0 z-10 overflow-hidden pointer-events-none">
                            {isVideoLoading && <div className="absolute inset-0 flex items-center justify-center bg-black/40"><Loader2 className="animate-spin text-white" /></div>}
                            <video ref={videoRef} className="w-full h-full object-cover transition-opacity duration-500" style={{ opacity: videoOpacity }} loop muted playsInline onPlaying={() => { setIsVideoLoading(false); setVideoOpacity(1); }} />
                         </div>
                     </div>
-
                     <div className="mt-auto p-10 flex items-center justify-between w-full bg-gradient-to-t from-black/40 to-transparent relative z-20">
                       <div className="flex flex-col text-white/50 text-[10px] font-mono"><span>4K</span><span>RAW</span></div>
                       <button onClick={takePhoto} className="w-16 h-16 rounded-full border-4 border-white flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"><div className="w-12 h-12 bg-white rounded-full shadow-lg" /></button>
@@ -683,56 +606,28 @@ const App: React.FC = () => {
                   <div className="absolute inset-0 bg-zinc-950 z-[60] flex flex-col animate-in slide-in-from-bottom duration-500">
                     <div className="p-8 flex justify-between items-center border-b border-white/5">
                       <div className="flex items-center gap-4">
-                        {selectedPhotoIndex !== null && (
-                          <button onClick={() => setSelectedPhotoIndex(null)} className="text-white hover:text-white/70">
-                            <ChevronLeft size={24} />
-                          </button>
-                        )}
-                        <span className="text-white text-[10px] font-black uppercase tracking-widest">
-                          {selectedPhotoIndex !== null ? 'Photo View' : 'Gallery'}
-                        </span>
+                        {selectedPhotoIndex !== null && <button onClick={() => setSelectedPhotoIndex(null)} className="text-white hover:text-white/70"><ChevronLeft size={24} /></button>}
+                        <span className="text-white text-[10px] font-black uppercase tracking-widest">{selectedPhotoIndex !== null ? 'Photo View' : 'Gallery'}</span>
                       </div>
-                      <button onClick={handlePhoneClose} className="text-white/30 hover:text-white p-2 bg-white/5 rounded-full flex items-center gap-2 px-3">
-                         <span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline">Close</span>
-                         <X size={24}/>
-                      </button>
+                      <button onClick={handlePhoneClose} className="text-white/30 hover:text-white p-2 bg-white/5 rounded-full flex items-center gap-2 px-3"><span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline">Close</span><X size={24}/></button>
                     </div>
-                    
                     <div className="flex-1 overflow-y-auto p-4 flex flex-col">
                       {selectedPhotoIndex !== null ? (
                         <div className="relative w-full h-full flex flex-col items-center justify-center gap-6 animate-in fade-in duration-300">
-                          <div className="relative w-full max-w-xl aspect-video rounded-2xl overflow-hidden shadow-2xl border border-white/10">
-                            <img src={inventory[selectedPhotoIndex]} className="w-full h-full object-contain bg-black" />
-                          </div>
+                          <div className="relative w-full max-w-xl aspect-video rounded-2xl overflow-hidden shadow-2xl border border-white/10"><img src={inventory[selectedPhotoIndex]} className="w-full h-full object-contain bg-black" /></div>
                           <div className="flex gap-4">
-                            <button 
-                              onClick={() => deletePhoto(selectedPhotoIndex)}
-                              className="px-8 py-3 bg-red-600/20 text-red-500 rounded-full border border-red-600/30 flex items-center gap-2 hover:bg-red-600 hover:text-white transition-all font-black uppercase text-[10px] tracking-widest"
-                            >
-                              <Trash2 size={16} /> Delete
-                            </button>
-                            <button 
-                              onClick={() => setSelectedPhotoIndex(null)}
-                              className="px-8 py-3 bg-white text-black rounded-full font-black uppercase text-[10px] tracking-widest hover:scale-105 transition-transform"
-                            >
-                              Back
-                            </button>
+                            <button onClick={() => deletePhoto(selectedPhotoIndex)} className="px-8 py-3 bg-red-600/20 text-red-500 rounded-full border border-red-600/30 flex items-center gap-2 hover:bg-red-600 hover:text-white transition-all font-black uppercase text-[10px] tracking-widest"><Trash2 size={16} /> Delete</button>
+                            <button onClick={() => setSelectedPhotoIndex(null)} className="px-8 py-3 bg-white text-black rounded-full font-black uppercase text-[10px] tracking-widest hover:scale-105 transition-transform">Back</button>
                           </div>
                         </div>
                       ) : (
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 content-start animate-in fade-in duration-300">
-                          {inventory.length > 0 ? (
-                            inventory.map((img, i) => (
-                              <div 
-                                key={i} 
-                                onClick={() => setSelectedPhotoIndex(i)}
-                                className="aspect-square bg-zinc-900 rounded-xl overflow-hidden border border-white/5 shadow-lg group relative cursor-pointer hover:border-white/20 transition-all active:scale-95"
-                              >
+                          {inventory.length > 0 ? inventory.map((img, i) => (
+                              <div key={i} onClick={() => setSelectedPhotoIndex(i)} className="aspect-square bg-zinc-900 rounded-xl overflow-hidden border border-white/5 shadow-lg group relative cursor-pointer hover:border-white/20 transition-all active:scale-95">
                                 <img src={img} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
                                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
                               </div>
-                            ))
-                          ) : (
+                            )) : (
                             <div className="col-span-full py-20 text-center flex flex-col items-center gap-4">
                               <ImageIcon size={48} className="text-white/10" />
                               <span className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">Your gallery is empty</span>
@@ -746,14 +641,17 @@ const App: React.FC = () => {
                 ) : (
                   <div className="w-full h-full flex flex-col p-6 sm:p-10 bg-zinc-950">
                     <div className="flex justify-between items-center text-zinc-600 text-[10px] font-black mb-12">
-                      <span>12:45</span>
+                      <div className="flex flex-col items-start leading-none">
+                        <span>{formattedTime}</span>
+                        <span className="text-[8px] opacity-60 uppercase tracking-tighter">{formattedLocation}</span>
+                      </div>
                       <div className="flex gap-2">
                         <Maximize size={12} className="cursor-pointer hover:text-white" onClick={toggleFullscreen} />
                         <Zap size={14} className="fill-current" />
                       </div>
                     </div>
-                    <div className="text-white text-4xl sm:text-6xl font-black tracking-tighter mb-2">12:45</div>
-                    <div className="text-zinc-600 text-[10px] font-black uppercase tracking-widest mb-16">Sunday, Oct 24</div>
+                    <div className="text-white text-4xl sm:text-6xl font-black tracking-tighter mb-2">{formattedTime}</div>
+                    <div className="text-zinc-600 text-[10px] font-black uppercase tracking-widest mb-16">{formattedDate}</div>
                     <div className="grid grid-cols-2 gap-4">
                       <button onClick={() => { setCameraMode(true); if(!isTouchDevice) controlsRef.current?.unlock(); }} className="aspect-square bg-zinc-900 rounded-[24px] flex items-center justify-center text-white hover:bg-zinc-800 transition-all hover:scale-105 shadow-2xl"><Camera size={32} /></button>
                       <button onClick={() => { setGalleryOpen(true); if(!isTouchDevice) controlsRef.current?.unlock(); }} className="aspect-square bg-zinc-900 rounded-[24px] flex items-center justify-center text-white hover:bg-zinc-800 transition-all hover:scale-105 shadow-2xl"><ImageIcon size={32} /></button>

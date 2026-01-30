@@ -36,10 +36,6 @@ interface TheaterSceneProps {
   joystickInput?: { x: number, y: number };
   isTouchDevice?: boolean;
   isHoveringUsher?: boolean;
-  // Added chandelier control props to match App.tsx usage
-  chandelierPos?: [number, number, number];
-  chandelierIntensity?: number;
-  chandelierScale?: number;
 }
 
 const TheaterScene: React.FC<TheaterSceneProps> = ({ 
@@ -65,11 +61,7 @@ const TheaterScene: React.FC<TheaterSceneProps> = ({
   isVisible = true,
   joystickInput = { x: 0, y: 0 },
   isTouchDevice = false,
-  isHoveringUsher = false,
-  // Destructure chandelier props with defaults to ensure Lobby receives valid values
-  chandelierPos = [0, 5.0, 7.8],
-  chandelierIntensity = 500,
-  chandelierScale = 0.8
+  isHoveringUsher = false
 }) => {
   const { camera } = useThree();
 
@@ -83,9 +75,9 @@ const TheaterScene: React.FC<TheaterSceneProps> = ({
 
   return (
     <group visible={isVisible}>
-      {/* Drastically reduced global lights to let the Chandelier be the main source in the lobby */}
-      <ambientLight intensity={0.05} color="#ffffff" /> 
-      <directionalLight position={[10, 20, 10]} intensity={0.02} castShadow />
+      <ambientLight intensity={1.0} color="#ffffff" /> 
+      <directionalLight position={[10, 20, 10]} intensity={0.6} castShadow />
+      {/* Fog removed to ensure transparency background works for camera passthrough */}
       
       <Lobby 
         highlightedPoster={highlightedPoster} 
@@ -94,10 +86,9 @@ const TheaterScene: React.FC<TheaterSceneProps> = ({
         performerArrived={performerArrived}
         stagePerformerIndex={stagePerformerIndex}
         isNearStageDoor={true}
-        // Use props passed from TheaterScene instead of hardcoded values
-        chandelierPos={chandelierPos}
-        chandelierIntensity={chandelierIntensity}
-        chandelierScale={chandelierScale}
+        chandelierPos={[0, -1.2, 7.8]}
+        chandelierIntensity={80}
+        chandelierScale={0.5}
         isHoveringUsher={isHoveringUsher}
       />
       <Player 
