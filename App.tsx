@@ -1,8 +1,9 @@
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { PointerLockControls } from '@react-three/drei';
 import TheaterScene from './components/TheaterScene';
-import { Camera, Image as ImageIcon, Scan, Maximize, Zap, X, BookOpen, Star, Loader2, Binoculars, MousePointer2, ChevronRight, ChevronLeft, Trash2 } from 'lucide-react';
+import { Camera, Image as ImageIcon, Scan, Maximize, Zap, X, BookOpen, Star, Loader2, Binoculars, MousePointer2, ChevronRight, ChevronLeft, Trash2, Settings2, Sliders } from 'lucide-react';
 
 // Inventory Item Types
 type ItemType = 'EMPTY' | 'OPERA_GLASS' | 'BOOK' | 'SIGNED_BOOK' | null;
@@ -11,15 +12,13 @@ const PROGRAM_PAGES = [
   "https://raw.githubusercontent.com/heyitisjee/theater-assets/main/1.png",
   "https://raw.githubusercontent.com/heyitisjee/theater-assets/main/2.png",
   "https://raw.githubusercontent.com/heyitisjee/theater-assets/main/3.png",
-  // Updated Page 4: Using a high-quality placeholder that matches the resume provided
-  "https://images.unsplash.com/photo-1586281380349-632531db7ed4?q=80&w=1000&auto=format&fit=crop", 
+  "https://raw.githubusercontent.com/heyitisjee/theater-assets/aa423786de2867da409b338855f8f990476fe518/4.png", 
   "https://raw.githubusercontent.com/heyitisjee/theater-assets/main/5.png"
 ];
 
-const PAGE_BORDER_COLOR = "#cc1e5e";
+const PAGE_BORDER_COLOR = "#000000";
 
 const App: React.FC = () => {
-  // Refs
   const controlsRef = useRef<any>(null);
   const lastActivityRef = useRef<number>(Date.now());
   const isTabHeldRef = useRef(false);
@@ -29,7 +28,6 @@ const App: React.FC = () => {
   const lastInteractionKeyRef = useRef<string | null>(null);
   const playerPositionRef = useRef({ x: 0, y: 0, z: 0 });
 
-  // Game State
   const [hasStarted, setHasStarted] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [isReading, setIsReading] = useState(false);
@@ -38,16 +36,13 @@ const App: React.FC = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [hasVisitedAuditorium, setHasVisitedAuditorium] = useState(false);
 
-  // Mobile Movement State
   const [joystickPos, setJoystickPos] = useState({ x: 0, y: 0 });
   const [isMovingJoystick, setIsMovingJoystick] = useState(false);
   
-  // Hotbar State
   const [hotbar, setHotbar] = useState<ItemType[]>(['EMPTY', 'OPERA_GLASS', null, null, null]);
   const [activeSlot, setActiveSlot] = useState<number>(0);
   const [hotbarOpacity, setHotbarOpacity] = useState(0);
 
-  // Tools & Modes
   const [cameraMode, setCameraMode] = useState(false);
   const [inventory, setInventory] = useState<string[]>([]);
   const [galleryOpen, setGalleryOpen] = useState(false);
@@ -55,10 +50,16 @@ const App: React.FC = () => {
   const [flash, setFlash] = useState(false);
   const [isZooming, setIsZooming] = useState(false);
 
-  // Performer Randomization
   const [stagePerformerIndex, setStagePerformerIndex] = useState(0);
 
-  // AR Video State
+  // Chandelier Control State - Values calibrated as requested
+  const [chanIntensity, setChanIntensity] = useState(580);
+  const [chanY, setChanY] = useState(-1.4);
+  const [chanX, setChanX] = useState(0);
+  const [chanZ, setChanZ] = useState(7.5);
+  const [chanScale, setChanScale] = useState(0.5);
+  const [showControls, setShowControls] = useState(true);
+
   const [videoOpacity, setVideoOpacity] = useState(0);
   const [isVideoLoading, setIsVideoLoading] = useState(false);
   
@@ -68,7 +69,6 @@ const App: React.FC = () => {
     'Azure Echo Poster': 'https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'
   };
 
-  // Interaction State
   const [interactionText, setInteractionText] = useState<string | null>(null);
   const [activeDialogue, setActiveDialogue] = useState<string | null>(null);
   const [targetedPoster, setTargetedPoster] = useState<string | null>(null);
@@ -181,14 +181,17 @@ const App: React.FC = () => {
     }
   }, [nearStageDoor, performerArrived, hasVisitedAuditorium]);
 
-  // Automatic Lobby Door (Exit)
   useEffect(() => {
     setLobbyDoorOpen(nearLobbyDoor);
   }, [nearLobbyDoor]);
 
   const handleAuditoriumEntry = useCallback(() => {
     setHasVisitedAuditorium(true);
-    setStagePerformerIndex(Math.floor(Math.random() * 3));
+    setStagePerformerIndex(prev => {
+      let next = Math.floor(Math.random() * 3);
+      if (next === prev) next = (prev + 1) % 3;
+      return next;
+    });
   }, []);
 
   const handleAuditoriumExit = useCallback(() => {
@@ -283,16 +286,14 @@ const App: React.FC = () => {
   const handlePhoneClose = useCallback(() => {
     if (selectedPhotoIndex !== null) {
       setSelectedPhotoIndex(null);
-    } else if (galleryOpen) {
+    } else {
       setGalleryOpen(false);
-    } else if (cameraMode) {
       setCameraMode(false);
+      if (!isTouchDevice && controlsRef.current) {
+          controlsRef.current.lock();
+      }
     }
-    // Re-lock the mouse if closing the phone entirely
-    if (!galleryOpen && !cameraMode && !isTouchDevice && controlsRef.current) {
-        controlsRef.current.lock();
-    }
-  }, [cameraMode, galleryOpen, selectedPhotoIndex, isTouchDevice]);
+  }, [selectedPhotoIndex, isTouchDevice]);
 
   useEffect(() => {
     const handleMouseDown = (e: MouseEvent) => { 
@@ -324,6 +325,7 @@ const App: React.FC = () => {
       if (e.code === 'Tab') { e.preventDefault(); isTabHeldRef.current = true; triggerHotbar(); }
       switch(e.code) {
         case 'KeyZ': setIsZooming(true); break;
+        case 'KeyK': setShowControls(prev => !prev); break;
         case 'KeyC': 
             if (!galleryOpen && !isReading) {
                 setCameraMode(prev => {
@@ -388,7 +390,7 @@ const App: React.FC = () => {
 
     if (activeDialogue) { text = activeDialogue; key = 'dialogue'; }
     else if (isReading) { text = "Press [ESC] to Stop Reading or Arrows to Turn Pages"; key = 'reading'; }
-    else if (isPhoneActive) { text = "Press [ESC] to go back or close phone"; key = 'phone-active'; }
+    else if (isPhoneActive) { text = "Press [ESC] to close phone"; key = 'phone-active'; }
     else if (isSitting) { text = "Press [F] to Stand"; key = 'sit-stand'; }
     else if (targetChair && isInside) { text = "Press [F] to Sit"; key = `sit-chair-${targetChair}`; }
     else if (isHoveringUsher) {
@@ -423,10 +425,10 @@ const App: React.FC = () => {
 
   return (
     <div className="relative w-full h-full bg-black select-none overflow-hidden font-sans">
-      <video ref={webcamRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover z-0 opacity-100" />
+      <video ref={webcamRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover z-0 opacity-100 pointer-events-none" />
 
       <div className={`transition-opacity duration-700 w-full h-full z-10 relative`}>
-        <Canvas shadows camera={{ fov: 75, position: [0, 2.5, 5] }} gl={{ preserveDrawingBuffer: true, alpha: true }}>
+        <Canvas shadows camera={{ fov: 75, position: [0, 2.5, 5] }} gl={{ preserveDrawingBuffer: true, alpha: true, antialias: true }}>
           <TheaterScene 
             onTargetChange={setTargetedPoster} 
             onChairTargetChange={setTargetChair}
@@ -451,10 +453,80 @@ const App: React.FC = () => {
             joystickInput={joystickPos}
             isTouchDevice={isTouchDevice}
             isHoveringUsher={isHoveringUsher}
+            chandelierPos={[chanX, chanY, chanZ]}
+            chandelierIntensity={chanIntensity}
+            chandelierScale={chanScale}
           />
           {!isTouchDevice && <PointerLockControls ref={controlsRef} onLock={() => setIsLocked(true)} onUnlock={() => setIsLocked(false)} />}
         </Canvas>
       </div>
+
+      {/* Chandelier Control Panel UI */}
+      {hasStarted && (
+        <div className={`absolute left-8 top-1/2 -translate-y-1/2 z-[100] transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${showControls ? 'translate-x-0' : '-translate-x-[calc(100%-20px)]'}`}>
+           <div className="bg-black/80 backdrop-blur-xl border border-white/10 rounded-3xl p-6 w-[280px] shadow-2xl relative">
+              <button 
+                onClick={() => setShowControls(!showControls)}
+                className="absolute -right-4 top-1/2 -translate-y-1/2 w-10 h-20 bg-zinc-900 border border-white/10 rounded-full flex items-center justify-center text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                {showControls ? <ChevronLeft size={20} /> : <Sliders size={18} className="translate-x-1" />}
+              </button>
+
+              <div className="flex items-center gap-3 mb-8 border-b border-white/5 pb-4">
+                 <Settings2 size={16} className="text-zinc-500" />
+                 <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-white">Chandelier Panel</h2>
+              </div>
+
+              <div className="space-y-6">
+                 <div>
+                    <div className="flex justify-between mb-2">
+                       <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500">Intensity</label>
+                       <span className="text-[10px] text-white font-mono">{chanIntensity}</span>
+                    </div>
+                    <input type="range" min="0" max="3000" step="10" value={chanIntensity} onChange={(e) => setChanIntensity(Number(e.target.value))} className="w-full accent-white h-1 bg-white/10 rounded-full appearance-none cursor-pointer" />
+                 </div>
+
+                 <div>
+                    <div className="flex justify-between mb-2">
+                       <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500">Height (Y)</label>
+                       <span className="text-[10px] text-white font-mono">{chanY.toFixed(1)}m</span>
+                    </div>
+                    <input type="range" min="-10" max="10" step="0.1" value={chanY} onChange={(e) => setChanY(Number(e.target.value))} className="w-full accent-white h-1 bg-white/10 rounded-full appearance-none cursor-pointer" />
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-4">
+                    <div>
+                       <div className="flex justify-between mb-2">
+                          <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500">Pos X</label>
+                          <span className="text-[10px] text-white font-mono">{chanX.toFixed(1)}</span>
+                       </div>
+                       <input type="range" min="-7" max="7" step="0.1" value={chanX} onChange={(e) => setChanX(Number(e.target.value))} className="w-full accent-white h-1 bg-white/10 rounded-full appearance-none cursor-pointer" />
+                    </div>
+                    <div>
+                       <div className="flex justify-between mb-2">
+                          <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500">Pos Z</label>
+                          <span className="text-[10px] text-white font-mono">{chanZ.toFixed(1)}</span>
+                       </div>
+                       <input type="range" min="1" max="14" step="0.1" value={chanZ} onChange={(e) => setChanZ(Number(e.target.value))} className="w-full accent-white h-1 bg-white/10 rounded-full appearance-none cursor-pointer" />
+                    </div>
+                 </div>
+
+                 <div>
+                    <div className="flex justify-between mb-2">
+                       <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500">Scale</label>
+                       <span className="text-[10px] text-white font-mono">x{chanScale.toFixed(2)}</span>
+                    </div>
+                    <input type="range" min="0.2" max="3.0" step="0.05" value={chanScale} onChange={(e) => setChanScale(Number(e.target.value))} className="w-full accent-white h-1 bg-white/10 rounded-full appearance-none cursor-pointer" />
+                 </div>
+              </div>
+
+              <div className="mt-8 pt-4 border-t border-white/5 flex justify-between items-center opacity-30">
+                 <span className="text-[8px] font-black tracking-widest uppercase text-white">Stage Management HUD</span>
+                 <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              </div>
+           </div>
+        </div>
+      )}
 
       <div className={`absolute inset-0 bg-white pointer-events-none z-[100] transition-opacity duration-150 ${flash ? 'opacity-100' : 'opacity-0'}`} />
 
@@ -473,7 +545,7 @@ const App: React.FC = () => {
            <div className="absolute inset-0 bg-black/80 backdrop-blur-xl" onClick={() => setIsReading(false)} />
            <div className="relative w-full h-full sm:max-w-4xl sm:max-h-[85vh] flex flex-col items-center justify-center p-4">
               <div 
-                className="relative group w-full aspect-[4/3] max-h-[80vh] shadow-[0_0_80px_rgba(0,0,0,1)] rounded-sm overflow-hidden flex items-center justify-center" 
+                className="relative group w-full aspect-[4/3] max-h-[80vh] shadow-[0_0_80px_rgba(0,0,0,1)] rounded-sm overflow-hidden flex items-center justify-center border-4 border-black" 
                 style={{ backgroundColor: PAGE_BORDER_COLOR }}
                 onClick={(e) => e.stopPropagation()}
               >
@@ -481,6 +553,7 @@ const App: React.FC = () => {
                     src={PROGRAM_PAGES[currentPage]} 
                     className="h-full w-auto object-contain select-none shadow-2xl"
                     alt={`Program Page ${currentPage + 1}`}
+                    loading="eager"
                  />
                  
                  <div className="absolute inset-0 flex justify-between items-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
@@ -515,9 +588,9 @@ const App: React.FC = () => {
       {!hasStarted && (
         <div className="absolute inset-0 flex items-center justify-center z-[150] bg-zinc-950">
           <div className="text-center p-6 sm:p-12 max-w-lg">
-            <h1 className="text-5xl sm:text-7xl font-black mb-4 text-white tracking-tighter uppercase">THEATER</h1>
+            <h1 className="text-5xl sm:text-7xl font-black mb-4 text-white tracking-tighter uppercase text-glow">THEATER</h1>
             <div className="w-24 h-1 bg-white mx-auto mb-8"></div>
-            <p className="text-zinc-500 mb-10 text-[10px] uppercase tracking-[0.3em] leading-loose">White Lobby | Black Auditorium</p>
+            <p className="text-zinc-500 mb-10 text-[10px] uppercase tracking-[0.3em] leading-loose">The Obsidian Velvet Lobby</p>
             <div className="flex flex-col gap-4">
               <button className="px-12 py-5 bg-white text-black font-black hover:scale-105 transition-transform uppercase tracking-[0.2em] text-[10px] shadow-2xl" 
                       onClick={() => { setHasStarted(true); if (!isTouchDevice) controlsRef.current?.lock(); else setIsLocked(true); }}>Enter Theater</button>
@@ -541,14 +614,14 @@ const App: React.FC = () => {
       )}
 
       {interactionText && !isPhoneActive && (
-        <div className="absolute top-[65%] left-1/2 -translate-x-1/2 z-[90] pointer-events-none">
+        <div className="absolute top-[65%] left-1/2 -translate-x-1/2 z-90 pointer-events-none">
           <div className="bg-white/90 backdrop-blur-md text-black px-6 py-3 rounded-full text-[10px] font-black uppercase tracking-widest shadow-2xl animate-in fade-in zoom-in duration-500">{interactionText}</div>
         </div>
       )}
 
       {hasStarted && (
         <div className="absolute inset-0 z-50 pointer-events-none overflow-hidden">
-          <div className={`absolute bottom-[-20px] left-[-30px] w-[180px] sm:w-[240px] h-[300px] sm:h-[360px] transition-all duration-700 ease-out origin-bottom-left rotate-[8deg] ${isZooming && isHoldingOperaGlass ? 'translate-y-40 scale-75 opacity-0' : ''} ${isReading ? 'translate-y-60 opacity-0' : ''}`}>
+          <div className={`absolute bottom-[-20px] left-[-30px] w-[180px] sm:w-[240px] h-[300px] sm:h-[360px] transition-all duration-700 ease-out origin-bottom-left rotate-[8deg] ${isZooming && isHoldingOperaGlass ? 'translate-y-40 scale-75 opacity-0' : ''} ${isReading || isPhoneActive ? 'translate-y-60 opacity-0' : ''}`}>
              {activeItem === 'OPERA_GLASS' ? (
                 <div className="w-full h-full relative">
                    <div className="absolute inset-0 bg-zinc-800 rounded-t-[50px] border-t-4 border-r-4 border-zinc-700 shadow-2xl flex flex-col items-center justify-start pt-12">
@@ -572,22 +645,34 @@ const App: React.FC = () => {
           </div>
 
           <div className={`absolute transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] flex items-center justify-center ${isPhoneActive ? 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] max-w-[850px] h-[65%] z-50' : 'bottom-[-40px] right-[-40px] w-[180px] sm:w-[240px] h-[300px] sm:h-[380px] rotate-[-10deg]'} ${isReading ? 'opacity-0 scale-50' : ''}`}>
-            <div className={`relative border-4 border-zinc-900 shadow-2xl transition-all duration-700 overflow-hidden ${isPhoneActive ? 'w-full h-full rotate-0 rounded-[30px] border-[12px] border-zinc-900/90 bg-zinc-950' : 'w-full h-full rounded-[40px] bg-zinc-950'}`}>
+            <div className={`relative border-4 border-zinc-900 shadow-2xl transition-all duration-700 overflow-hidden ${isPhoneActive ? 'w-full h-full rotate-0 rounded-[30px] border-[12px] border-zinc-900/90' : 'w-full h-full rounded-[40px] bg-zinc-950'} ${cameraMode ? 'bg-transparent' : 'bg-zinc-950'}`}>
               <div className="w-full h-full relative flex flex-col pointer-events-auto bg-transparent">
                 {cameraMode ? (
                   <>
-                    <div className="absolute inset-0 z-0 pointer-events-none">
+                    <div className="absolute inset-0 z-0 pointer-events-none flex items-center justify-center bg-transparent">
+                        <div className="absolute inset-0 border-[1px] border-white/10 grid grid-cols-3 grid-rows-3">
+                           <div className="border-[0.5px] border-white/5" /><div className="border-[0.5px] border-white/5" /><div className="border-[0.5px] border-white/5" />
+                           <div className="border-[0.5px] border-white/5" /><div className="border-[0.5px] border-white/5" /><div className="border-[0.5px] border-white/5" />
+                           <div className="border-[0.5px] border-white/5" /><div className="border-[0.5px] border-white/5" /><div className="border-[0.5px] border-white/5" />
+                        </div>
+                        <div className="absolute top-4 left-4 w-8 h-8 border-t-2 border-l-2 border-white/40" />
+                        <div className="absolute top-4 right-4 w-8 h-8 border-t-2 border-r-2 border-white/40" />
+                        <div className="absolute bottom-4 left-4 w-8 h-8 border-b-2 border-l-2 border-white/40" />
+                        <div className="absolute bottom-4 right-4 w-8 h-8 border-b-2 border-r-2 border-white/40" />
+
                         <div className="absolute inset-0 flex items-center justify-center">
                            <div className="w-48 h-48 border border-white/20 rounded-full animate-pulse" />
                            {activePoster && <div className="absolute flex flex-col items-center"><Scan size={120} className="text-white drop-shadow-glow" /><span className="mt-4 bg-white text-black px-4 py-1 text-[10px] font-black uppercase tracking-widest rounded-full">{activePoster}</span></div>}
                         </div>
-                        <div className="absolute inset-0 z-10 overflow-hidden">
+                        
+                        <div className="absolute inset-0 z-10 overflow-hidden pointer-events-none">
                            {isVideoLoading && <div className="absolute inset-0 flex items-center justify-center bg-black/40"><Loader2 className="animate-spin text-white" /></div>}
                            <video ref={videoRef} className="w-full h-full object-cover transition-opacity duration-500" style={{ opacity: videoOpacity }} loop muted playsInline onPlaying={() => { setIsVideoLoading(false); setVideoOpacity(1); }} />
                         </div>
                     </div>
-                    <div className="mt-auto p-10 flex items-center justify-between w-full bg-gradient-to-t from-black to-transparent relative z-20">
-                      <div className="flex flex-col text-white/50 text-[10px] font-mono"><span>4K</span><span>SCAN</span></div>
+
+                    <div className="mt-auto p-10 flex items-center justify-between w-full bg-gradient-to-t from-black/40 to-transparent relative z-20">
+                      <div className="flex flex-col text-white/50 text-[10px] font-mono"><span>4K</span><span>RAW</span></div>
                       <button onClick={takePhoto} className="w-16 h-16 rounded-full border-4 border-white flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"><div className="w-12 h-12 bg-white rounded-full shadow-lg" /></button>
                       <button onClick={() => { setGalleryOpen(true); setCameraMode(false); }} className="w-12 h-12 bg-zinc-900 rounded-xl flex items-center justify-center border border-white/10 overflow-hidden">
                         {inventory.length > 0 ? <img src={inventory[0]} className="w-full h-full object-cover" /> : <ImageIcon size={20} className="text-white/20" />}
@@ -607,7 +692,10 @@ const App: React.FC = () => {
                           {selectedPhotoIndex !== null ? 'Photo View' : 'Gallery'}
                         </span>
                       </div>
-                      <button onClick={handlePhoneClose} className="text-white/30 hover:text-white p-2 bg-white/5 rounded-full"><X size={24}/></button>
+                      <button onClick={handlePhoneClose} className="text-white/30 hover:text-white p-2 bg-white/5 rounded-full flex items-center gap-2 px-3">
+                         <span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline">Close</span>
+                         <X size={24}/>
+                      </button>
                     </div>
                     
                     <div className="flex-1 overflow-y-auto p-4 flex flex-col">

@@ -1,3 +1,4 @@
+
 import React, { useRef, useMemo, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Vector3, Raycaster, Vector2, Euler, Object3D } from 'three';
@@ -153,8 +154,13 @@ const Player: React.FC<PlayerProps> = ({
       }
     }
 
-    if (nextPos.z < -20) allowMove = false;
+    // Boundary restriction: Prevent player from entering the stage area
+    if (nextPos.z < -13.0) allowMove = false;
+    
+    // side walls
     if (Math.abs(nextPos.x) > 7.5) allowMove = false; 
+    
+    // lobby exterior boundary
     if (nextPos.z > 28) allowMove = false; 
 
     if (allowMove) {
@@ -213,24 +219,23 @@ const Player: React.FC<PlayerProps> = ({
          let current: Object3D | null = intersects[i].object;
          while (current) {
            if (current.userData.type === 'poster') {
-             foundTarget = current.name || current.userData.name;
+             foundTarget = current.name; 
              break;
            }
            if (current.userData.type === 'chair') {
-             foundChair = current.name;
+             foundChair = current.name; 
              break;
            }
            if (current.userData.type === 'usher') {
-             foundUsher = true;
+             foundUsher = true; 
              break;
            }
            if (current.userData.type === 'performer') {
-             foundPerformer = true;
+             foundPerformer = true; 
              break;
            }
            current = current.parent;
          }
-
          if (foundTarget || foundChair || foundUsher || foundPerformer) break;
       }
     }
@@ -244,16 +249,18 @@ const Player: React.FC<PlayerProps> = ({
       onChairTargetChange(foundChair);
     }
     if (foundUsher !== wasHoveringUsher.current) {
-       wasHoveringUsher.current = foundUsher;
-       onUsherHover(foundUsher);
+      wasHoveringUsher.current = foundUsher;
+      onUsherHover(foundUsher);
     }
     if (foundPerformer !== wasHoveringPerformer.current) {
-       wasHoveringPerformer.current = foundPerformer;
-       onPerformerHover(foundPerformer);
+      wasHoveringPerformer.current = foundPerformer;
+      onPerformerHover(foundPerformer);
     }
   });
 
+  // Adding missing return to satisfy FC type requirement and resolve void error
   return null;
 };
 
+// Adding missing default export to fix "module has no default export" error in TheaterScene.tsx
 export default Player;

@@ -1,3 +1,4 @@
+
 import React, { useRef, Suspense, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { DoubleSide, Object3D, PointLight } from 'three';
@@ -24,7 +25,6 @@ const StaticUsher: React.FC<{ isHovering: boolean }> = ({ isHovering }) => {
   const { scene, animations } = useGLTF(USHER_MODEL_URL);
   const { actions } = useAnimations(animations, groupRef);
 
-  // Hardcoded values based on previous best positioning
   const position: [number, number, number] = [4.2, 0.0, 2.0];
   const rotation: [number, number, number] = [0, -0.8, 0];
   const scale = 1.3;
@@ -38,6 +38,10 @@ const StaticUsher: React.FC<{ isHovering: boolean }> = ({ isHovering }) => {
           child.material.depthWrite = true;
           child.material.depthTest = true;
           child.material.needsUpdate = true;
+          // Subtly reduce environmental light on the material to prevent washing out
+          if ('envMapIntensity' in child.material) {
+             (child.material as any).envMapIntensity = 0.4;
+          }
         }
       }
     });
@@ -80,7 +84,7 @@ const StageModel: React.FC = () => {
     <primitive 
       object={scene} 
       name="StageModel" 
-      position={[0, 0, -11]} 
+      position={[0, 0, -6.5]} 
       rotation={[0, -1.5708, 0]} 
       scale={[0.7, 0.7, 0.7]} 
     />
@@ -91,7 +95,7 @@ const StagePerformer: React.FC<{ index: number }> = ({ index }) => {
   const models = [
     'https://raw.githubusercontent.com/heyitisjee/theater-assets/8618c9db567f0136c585c15f14451496f3c03ea1/dancing1-v1.glb',
     'https://raw.githubusercontent.com/heyitisjee/theater-assets/2a1b1d9ea924eec7f9c28887e328da6dfd12c557/dancing2-v1.glb',
-    'https://raw.githubusercontent.com/heyitisjee/theater-assets/2a1b1d9ea924eec7f9c28887e328da6dfd12c557/dancing3-v1.glb'
+    'https://raw.githubusercontent.com/heyitisjee/theater-assets/3547a04c965c22634c51f364b6639c915ba3184a/oldman-v3.glb'
   ];
   
   const { scene, animations } = useGLTF(models[index]);
@@ -108,7 +112,7 @@ const StagePerformer: React.FC<{ index: number }> = ({ index }) => {
   return (
     <primitive 
       object={scene} 
-      position={[0.8, 6.0, -15]} 
+      position={[0.8, 6.0, -10.5]} 
       rotation={[0, 0, 0]}
       scale={[2.0, 2.0, 2.0]} 
     />
@@ -159,19 +163,20 @@ const Performer: React.FC = () => {
   );
 };
 
-const Chandelier: React.FC<{ position: [number, number, number], intensity: number, scale: number }> = ({ position, intensity, scale }) => {
+const Chandelier: React.FC<{ position: [number, number, number], scale: number, intensity: number }> = ({ position, scale, intensity }) => {
   const LIGHT_MODEL_URL = 'https://raw.githubusercontent.com/heyitisjee/theater-assets/2a1b1d9ea924eec7f9c28887e328da6dfd12c557/light-v1%20(2).glb';
   const { scene } = useGLTF(LIGHT_MODEL_URL);
-  const lightColor = '#fff4d4';
+  const lightColor = '#fff4d4'; 
 
   return (
     <group position={position} scale={[scale, scale, scale]}>
       <primitive object={scene} />
       <pointLight 
         intensity={intensity} 
-        distance={60} 
+        distance={100} 
         color={lightColor} 
-        position={[0, 0, 0]} 
+        position={[0, -1, 0]} 
+        decay={2}
       />
     </group>
   );
@@ -221,14 +226,17 @@ const Lobby: React.FC<LobbyProps> = ({
   lobbyDoorOpen, 
   performerArrived,
   stagePerformerIndex = 0,
-  chandelierPos = [0, -1.2, 7.8], 
-  chandelierIntensity = 80, 
+  chandelierPos = [0, -1.4, 7.5], 
+  chandelierIntensity = 580,
   chandelierScale = 0.5,
   isHoveringUsher = false
 }) => {
   const lobbyWidth = 16;
   const lobbyHeight = 8;
   const lobbyDepth = 15; 
+  
+  // Set lobby color to a deep Obsidian Velvet
+  const lobbyColor = "#120202";
 
   const leftAudDoorRef = useRef<THREE.Group>(null);
   const rightAudDoorRef = useRef<THREE.Group>(null);
@@ -250,62 +258,63 @@ const Lobby: React.FC<LobbyProps> = ({
 
   return (
     <group>
-      <hemisphereLight intensity={0.4} groundColor="#000" color="#ffffff" />
+      <hemisphereLight intensity={0.05} groundColor="#000" color="#ffffff" />
       
       <group position={[0, 0, lobbyDepth / 2]}>
          <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
             <planeGeometry args={[lobbyWidth, lobbyDepth]} />
-            <meshStandardMaterial color="#ffffff" roughness={0.05} metalness={0.05} />
+            <meshStandardMaterial color={lobbyColor} roughness={1.0} metalness={0.0} />
          </mesh>
          <mesh position={[-lobbyWidth/2, lobbyHeight/2, 0]} rotation={[0, Math.PI/2, 0]}>
             <planeGeometry args={[lobbyDepth, lobbyHeight]} />
-            <meshStandardMaterial color="#ffffff" side={DoubleSide} />
+            <meshStandardMaterial color={lobbyColor} roughness={1.0} metalness={0.0} side={DoubleSide} />
          </mesh>
          <mesh position={[lobbyWidth/2, lobbyHeight/2, 0]} rotation={[0, -Math.PI/2, 0]}>
             <planeGeometry args={[lobbyDepth, lobbyHeight]} />
-            <meshStandardMaterial color="#ffffff" side={DoubleSide} />
+            <meshStandardMaterial color={lobbyColor} roughness={1.0} metalness={0.0} side={DoubleSide} />
          </mesh>
+         
          <mesh name="Crimson Specter Poster" userData={{ type: 'poster' }} position={[-lobbyWidth / 2 + 0.1, 1.7, -2]} rotation={[0, Math.PI / 2, 0]}>
             <planeGeometry args={[2, 3]} />
-            <meshStandardMaterial color="#900" emissive="#f00" emissiveIntensity={highlightedPoster === "Crimson Specter Poster" ? 1.0 : 0} />
+            <meshStandardMaterial color="#600" emissive="#300" emissiveIntensity={highlightedPoster === "Crimson Specter Poster" ? 1.5 : 0.4} />
          </mesh>
          <mesh name="Emerald Voyage Poster" userData={{ type: 'poster' }} position={[lobbyWidth / 2 - 0.1, 1.7, 0]} rotation={[0, -Math.PI / 2, 0]}>
             <planeGeometry args={[2, 3]} />
-            <meshStandardMaterial color="#060" emissive="#0f0" emissiveIntensity={highlightedPoster === "Emerald Voyage Poster" ? 1.0 : 0} />
+            <meshStandardMaterial color="#040" emissive="#020" emissiveIntensity={highlightedPoster === "Emerald Voyage Poster" ? 1.5 : 0.4} />
          </mesh>
          <mesh name="Azure Echo Poster" userData={{ type: 'poster' }} position={[-lobbyWidth / 2 + 0.1, 1.7, 2]} rotation={[0, Math.PI / 2, 0]}>
             <planeGeometry args={[2, 3]} />
-            <meshStandardMaterial color="#006" emissive="#00f" emissiveIntensity={highlightedPoster === "Azure Echo Poster" ? 1.2 : 0} />
+            <meshStandardMaterial color="#004" emissive="#002" emissiveIntensity={highlightedPoster === "Azure Echo Poster" ? 1.5 : 0.4} />
          </mesh>
       </group>
 
       <group position={[0, lobbyHeight / 2, 15]}>
-          <mesh position={[-5, 0, 0]}><boxGeometry args={[6, lobbyHeight, 0.5]} /><meshStandardMaterial color="#ffffff" /></mesh>
-          <mesh position={[5, 0, 0]}><boxGeometry args={[6, lobbyHeight, 0.5]} /><meshStandardMaterial color="#ffffff" /></mesh>
-          <mesh position={[0, 2, 0]}><boxGeometry args={[4, 4, 0.5]} /><meshStandardMaterial color="#ffffff" /></mesh>
+          <mesh position={[-5, 0, 0]}><boxGeometry args={[6, lobbyHeight, 0.5]} /><meshStandardMaterial color={lobbyColor} /></mesh>
+          <mesh position={[5, 0, 0]}><boxGeometry args={[6, lobbyHeight, 0.5]} /><meshStandardMaterial color={lobbyColor} /></mesh>
+          <mesh position={[0, 2, 0]}><boxGeometry args={[4, 4, 0.5]} /><meshStandardMaterial color={lobbyColor} /></mesh>
       </group>
       <group position={[0, lobbyHeight / 2, 0]}>
-          <mesh position={[-5, 0, 0]}><boxGeometry args={[6, lobbyHeight, 0.5]} /><meshStandardMaterial color="#ffffff" /></mesh>
-          <mesh position={[5, 0, 0]}><boxGeometry args={[6, lobbyHeight, 0.5]} /><meshStandardMaterial color="#ffffff" /></mesh>
-          <mesh position={[0, 2, 0]}><boxGeometry args={[4, 4, 0.5]} /><meshStandardMaterial color="#ffffff" /></mesh>
+          <mesh position={[-5, 0, 0]}><boxGeometry args={[6, lobbyHeight, 0.5]} /><meshStandardMaterial color={lobbyColor} /></mesh>
+          <mesh position={[5, 0, 0]}><boxGeometry args={[6, lobbyHeight, 0.5]} /><meshStandardMaterial color={lobbyColor} /></mesh>
+          <mesh position={[0, 2, 0]}><boxGeometry args={[4, 4, 0.5]} /><meshStandardMaterial color={lobbyColor} /></mesh>
       </group>
 
       <mesh position={[0, lobbyHeight, lobbyDepth/2]} rotation={[Math.PI/2, 0, 0]}>
          <planeGeometry args={[lobbyWidth, lobbyDepth]} />
-         <meshStandardMaterial color="#ffffff" />
+         <meshStandardMaterial color={lobbyColor} roughness={1.0} />
       </mesh>
 
       <group position={[2, 0, 0]} ref={rightAudDoorRef}>
-        <mesh position={[-1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><meshStandardMaterial color="#400" /></mesh>
+        <mesh position={[-1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><meshStandardMaterial color="#200" /></mesh>
       </group>
       <group position={[-2, 0, 0]} ref={leftAudDoorRef}>
-        <mesh position={[1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><meshStandardMaterial color="#400" /></mesh>
+        <mesh position={[1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><meshStandardMaterial color="#200" /></mesh>
       </group>
       <group position={[2, 0, 15]} ref={rightLobbyDoorRef}>
-        <mesh position={[-1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><meshStandardMaterial color="#eee" /></mesh>
+        <mesh position={[-1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><meshStandardMaterial color="#111" /></mesh>
       </group>
       <group position={[-2, 0, 15]} ref={leftLobbyDoorRef}>
-        <mesh position={[1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><meshStandardMaterial color="#eee" /></mesh>
+        <mesh position={[1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><meshStandardMaterial color="#111" /></mesh>
       </group>
 
       <group position={[0, 0, -12.5]}>
@@ -340,47 +349,52 @@ const Lobby: React.FC<LobbyProps> = ({
          </group>
          <Suspense fallback={null}>
             <StageModel />
-            <spotLight position={[0, 10, -15]} intensity={15} angle={0.6} penumbra={1} color="#ffffff" />
+            <spotLight position={[0, 10, -10.5]} intensity={15} angle={0.6} penumbra={1} color="#ffffff" />
             <StagePerformer index={stagePerformerIndex} />
          </Suspense>
       </group>
 
       <Suspense fallback={null}>
-        <Chandelier position={chandelierPos} intensity={chandelierIntensity} scale={chandelierScale} />
+        <Chandelier position={chandelierPos} scale={chandelierScale} intensity={chandelierIntensity} />
       </Suspense>
 
       <Suspense fallback={null}>
         <StaticUsher isHovering={isHoveringUsher} />
       </Suspense>
 
+      {/* Exterior Stage Door Area - Brightened significantly as requested */}
       <group position={[0, 0, 15]}>
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 7.5]}>
             <planeGeometry args={[20, 15]} />
-            <meshStandardMaterial color="#020202" />
+            <meshStandardMaterial color="#050505" />
           </mesh>
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 7.5]}>
             <planeGeometry args={[3.0, 15]} />
-            <meshStandardMaterial color="#700" />
+            <meshStandardMaterial color="#400" />
           </mesh>
           <group position={[2.5, 0, 7.5]}>
-             <mesh position={[0, 0.5, 0]}><boxGeometry args={[0.2, 1, 15]} /><meshStandardMaterial color="#222" /></mesh>
-             <mesh position={[0, 1, 0]}><boxGeometry args={[0.1, 0.1, 15]} /><meshStandardMaterial color="#bbb" metalness={1} roughness={0.1} /></mesh>
+             <mesh position={[0, 0.5, 0]}><boxGeometry args={[0.2, 1, 15]} /><meshStandardMaterial color="#111" /></mesh>
+             <mesh position={[0, 1, 0]}><boxGeometry args={[0.1, 0.1, 15]} /><meshStandardMaterial color="#444" metalness={1} roughness={0.1} /></mesh>
           </group>
           <group position={[-2.5, 0, 7.5]}>
-             <mesh position={[0, 0.5, 0]}><boxGeometry args={[0.2, 1, 15]} /><meshStandardMaterial color="#222" /></mesh>
-             <mesh position={[0, 1, 0]}><boxGeometry args={[0.1, 0.1, 15]} /><meshStandardMaterial color="#bbb" metalness={1} roughness={0.1} /></mesh>
+             <mesh position={[0, 0.5, 0]}><boxGeometry args={[0.2, 1, 15]} /><meshStandardMaterial color="#111" /></mesh>
+             <mesh position={[0, 1, 0]}><boxGeometry args={[0.1, 0.1, 15]} /><meshStandardMaterial color="#444" metalness={1} roughness={0.1} /></mesh>
           </group>
-          <pointLight position={[0, 7, 5]} intensity={2.0} distance={30} color="#ffffff" />
+          {/* Main Area Floodlight for clarity outside */}
+          <pointLight position={[0, 8, 8]} intensity={8.0} distance={40} color="#ffffff" />
+          {/* Secondary stage-door spotlight */}
+          <spotLight position={[0, 12, 12]} intensity={5.0} angle={0.5} penumbra={1} distance={50} color="#fff4d4" target-position={[0,0,15]} />
+          
           <group position={[0, 0, 0]}>
              {[...Array(6)].map((_, i) => (
                 <group key={`fan-l-${i}`} position={[-4.5 + Math.random() * -1, 0, 5 + i * 2]}>
-                   <mesh position={[0, 1, 0]}><boxGeometry args={[0.5, 2, 0.5]} /><meshStandardMaterial color={`hsl(${Math.random() * 360}, 30%, 20%)`} /></mesh>
+                   <mesh position={[0, 1, 0]}><boxGeometry args={[0.5, 2, 0.5]} /><meshStandardMaterial color={`hsl(${Math.random() * 360}, 10%, 10%)`} /></mesh>
                    <PaparazziFlash position={[0, 1.8, 0.2]} />
                 </group>
              ))}
              {[...Array(6)].map((_, i) => (
                 <group key={`fan-r-${i}`} position={[4.5 + Math.random() * 1, 0, 5 + i * 2]}>
-                   <mesh position={[0, 1, 0]}><boxGeometry args={[0.5, 2, 0.5]} /><meshStandardMaterial color={`hsl(${Math.random() * 360}, 30%, 20%)`} /></mesh>
+                   <mesh position={[0, 1, 0]}><boxGeometry args={[0.5, 2, 0.5]} /><meshStandardMaterial color={`hsl(${Math.random() * 360}, 10%, 10%)`} /></mesh>
                    <PaparazziFlash position={[0, 1.8, -0.2]} />
                 </group>
              ))}
