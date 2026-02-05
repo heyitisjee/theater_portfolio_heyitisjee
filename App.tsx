@@ -68,14 +68,24 @@ const App: React.FC = () => {
   const [videoOpacity, setVideoOpacity] = useState(0);
   const [isVideoLoading, setIsVideoLoading] = useState(false);
   
+  // VIDEO LINKS
+  const CRIMSON_SPECTER_VIDEO = "https://raw.githubusercontent.com/heyitisjee/theater-assets/78c95b4a9970bb402c50c028b4bf9efee27e4245/impressions%20(1).mp4";
+  const AZURE_ECHO_VIDEO = "https://raw.githubusercontent.com/heyitisjee/theater-assets/529235aea42345b51925a87d70e18a90c8d26ec0/version%202%20(created%20as%20a%20game%20with%203D%20assets).mp4";
+  const MIDNIGHT_WHISPERS_VIDEO = "https://raw.githubusercontent.com/heyitisjee/theater-assets/93ab249041af65477dc62c7d6219dd5bab2de3bb/version%202%20-%203D%20with%20occlusion%20test%20(1).mp4";
+  const EMERALD_VOYAGE_VIDEO = "https://raw.githubusercontent.com/heyitisjee/theater-assets/fd801d1f9503a44d635ceba74fbc3cd3e2a46944/Add%20a%20subheading.mp4";
+  const SOLAR_FLARE_VIDEO = "https://raw.githubusercontent.com/heyitisjee/theater-assets/3dff2c2eca882312203b736cff14016b30394163/design.mp4";
+  const GOLDEN_ODYSSEY_VIDEO = "https://raw.githubusercontent.com/heyitisjee/theater-assets/590888900c2f2fae62a12f6b9dad6ee7debdd113/Mulan%E2%80%99s%20friend%20%5BDalu%5D%20Branksome%20Hall%20Asia%2C%20student-made%20production%20of%20Mulan%20(3) (1) (1).mp4";
+  
   const posterVideos: Record<string, string> = {
-    'Crimson Specter Poster': 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-    'Emerald Voyage Poster': 'https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-    'Azure Echo Poster': 'https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-    'Solar Flare Poster': 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4',
-    'Midnight Whispers Poster': 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4',
-    'Golden Odyssey Poster': 'https://storage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4'
+    'First Filter Poster': CRIMSON_SPECTER_VIDEO,
+    'Theater Club Promotion Poster': EMERALD_VOYAGE_VIDEO,
+    'Korean Theater Poster 1': AZURE_ECHO_VIDEO,
+    'Broadway Playbill Poster': SOLAR_FLARE_VIDEO,
+    'Korean Theater Poster 2': MIDNIGHT_WHISPERS_VIDEO,
+    'Theater & AR Portfolio poster': GOLDEN_ODYSSEY_VIDEO
   };
+
+  const isPhoneActive = cameraMode || galleryOpen;
 
   // Interaction State
   const [interactionText, setInteractionText] = useState<string | null>(null);
@@ -103,17 +113,50 @@ const App: React.FC = () => {
   const isHoldingBook = activeItem === 'BOOK' || activeItem === 'SIGNED_BOOK';
   const currentTargetFov = (isHoldingOperaGlass && isZooming) ? 30 : 75;
 
-  const isPhoneActive = cameraMode || galleryOpen;
+  // Multi-layered Escape handling
+  useEffect(() => {
+    const onPointerLockChange = () => {
+      const currentlyLocked = document.pointerLockElement !== null;
+      setIsLocked(currentlyLocked);
+    };
 
-  // Audio Success Feedback
+    const handleGlobalEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsReading(false);
+        setGalleryOpen(false);
+        setCameraMode(false);
+        setSelectedPhotoIndex(null);
+        
+        if (isSitting) {
+            setIsSitting(false);
+            setSittingChair(null);
+        }
+
+        if (document.pointerLockElement) {
+          document.exitPointerLock();
+        }
+        
+        setIsLocked(false);
+      }
+    };
+
+    document.addEventListener('pointerlockchange', onPointerLockChange);
+    window.addEventListener('keydown', handleGlobalEsc, { capture: true });
+    
+    return () => {
+      document.removeEventListener('pointerlockchange', onPointerLockChange);
+      window.removeEventListener('keydown', handleGlobalEsc, { capture: true });
+    };
+  }, [isSitting]);
+
   const playAutographSound = () => {
     try {
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'triangle';
-      osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
-      osc.frequency.exponentialRampToValueAtTime(1046.50, ctx.currentTime + 0.3); // C6
+      osc.frequency.setValueAtTime(523.25, ctx.currentTime); 
+      osc.frequency.exponentialRampToValueAtTime(1046.50, ctx.currentTime + 0.3); 
       gain.gain.setValueAtTime(0.1, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
       osc.connect(gain);
@@ -121,11 +164,10 @@ const App: React.FC = () => {
       osc.start();
       osc.stop(ctx.currentTime + 0.6);
     } catch (e) {
-      console.warn("Audio Context blocked or failed", e);
+      console.warn("Audio Context blocked", e);
     }
   };
 
-  // Real-time Clock Effect
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
@@ -211,13 +253,10 @@ const App: React.FC = () => {
     }
   }, [cameraMode, activePoster]);
   
-  // Performer Arrival Trigger Logic
   useEffect(() => {
     if (nearStageDoor && !performerArrived && hasVisitedAuditorium) {
-       // Trigger the fan excitement first
        showDialogue("Fan: LOOK! She's coming out! Over here!!", 4000);
        setCrowdExcitement(true);
-       
        const arrivalTimer = setTimeout(() => {
           setPerformerArrived(true);
           setTimeout(() => setCrowdExcitement(false), 8000);
@@ -227,8 +266,12 @@ const App: React.FC = () => {
   }, [nearStageDoor, performerArrived, hasVisitedAuditorium]);
 
   useEffect(() => {
-    setLobbyDoorOpen(nearLobbyDoor);
-  }, [nearLobbyDoor]);
+    if (hasVisitedAuditorium) {
+      setLobbyDoorOpen(nearLobbyDoor);
+    } else {
+      setLobbyDoorOpen(false);
+    }
+  }, [nearLobbyDoor, hasVisitedAuditorium]);
 
   const handleAuditoriumEntry = useCallback(() => {
     setHasVisitedAuditorium(true);
@@ -277,7 +320,7 @@ const App: React.FC = () => {
     setActiveSlot(2); 
     triggerHotbar();
     setAuditoriumDoorOpen(true);
-    showDialogue("Usher: Here's your program. I've opened the theater doors for you. Enjoy!");
+    showDialogue("Usher: Here is your program. Enjoy the show!");
   }, [triggerHotbar, showDialogue]);
 
   const receiveAutograph = useCallback(() => {
@@ -285,10 +328,8 @@ const App: React.FC = () => {
      const signedBookIndex = hotbar.indexOf('SIGNED_BOOK');
      
      if (bookIndex !== -1) {
-       // Trigger Performer Reactivity
        setIsPerformerSigning(true);
        playAutographSound();
-       
        setHotbar(prev => {
          const newHotbar = [...prev];
          newHotbar[bookIndex] = 'SIGNED_BOOK';
@@ -296,8 +337,7 @@ const App: React.FC = () => {
        });
        setActiveSlot(bookIndex);
        triggerHotbar();
-       showDialogue("Performer: Oh, let me sign that for you! There you go!");
-       
+       showDialogue("Performer: Hope you enjoyed the show! 조심히가세요!");
        setTimeout(() => setIsPerformerSigning(false), 2000);
      } else if (signedBookIndex !== -1) {
        showDialogue("Performer: I've already signed your program, dear. Have a lovely evening!");
@@ -336,11 +376,8 @@ const App: React.FC = () => {
     } else {
       setGalleryOpen(false);
       setCameraMode(false);
-      if (!isTouchDevice && controlsRef.current) {
-          controlsRef.current.lock();
-      }
     }
-  }, [selectedPhotoIndex, isTouchDevice]);
+  }, [selectedPhotoIndex]);
 
   useEffect(() => {
     const handleMouseDown = (e: MouseEvent) => { 
@@ -348,6 +385,9 @@ const App: React.FC = () => {
       if (e.button === 0 && isHoldingBook && isLocked && !isPhoneActive) {
         setIsReading(prev => !prev);
         if (!isReading) setCurrentPage(0);
+      }
+      if (e.button === 0 && cameraMode && isLocked) {
+        takePhoto();
       }
     };
     const handleMouseUp = (e: MouseEvent) => { if (e.button === 2) setIsZooming(false); };
@@ -358,9 +398,9 @@ const App: React.FC = () => {
     window.addEventListener('contextmenu', handleContextMenu);
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!isLocked && hasStarted) return; 
+      if (!isLocked && !isPhoneActive && !isReading && hasStarted && !['KeyC', 'KeyV', 'Escape'].includes(e.code)) return; 
+      
       if (isReading) {
-        if (e.code === 'Escape') { setIsReading(false); return; }
         if (e.code === 'ArrowRight' || e.code === 'Space') { nextPage(); return; }
         if (e.code === 'ArrowLeft') { prevPage(); return; }
       }
@@ -373,12 +413,24 @@ const App: React.FC = () => {
       switch(e.code) {
         case 'KeyZ': setIsZooming(true); break;
         case 'KeyC': 
-            if (!galleryOpen && !isReading) {
-                setCameraMode(prev => {
-                    const next = !prev;
-                    if (next && !isTouchDevice) controlsRef.current?.unlock();
-                    return next;
-                });
+            if (!isReading && hasStarted) {
+                const togglingCamera = !cameraMode;
+                if (togglingCamera) {
+                    setGalleryOpen(false);
+                    setCameraMode(true);
+                } else {
+                    setCameraMode(false);
+                }
+            }
+            break;
+        case 'KeyV':
+            if (hasStarted && !isReading) {
+                const togglingGallery = !galleryOpen;
+                setGalleryOpen(togglingGallery);
+                if (togglingGallery) {
+                    setCameraMode(false);
+                    if (document.pointerLockElement) document.exitPointerLock();
+                }
             }
             break;
         case 'KeyE':
@@ -387,10 +439,12 @@ const App: React.FC = () => {
             if (hotbar[2] === null) receiveBook();
             else {
                setAuditoriumDoorOpen(true);
-               showDialogue("Usher: Of course, let me open those for you again.");
+               showDialogue("Usher: Enjoy the show! Press 2 to equip the opera glass.");
             }
           } else if (nearAuditoriumDoor && !auditoriumDoorOpen) {
             showDialogue("Usher: Talk to me! You'll need a program to enter.");
+          } else if (nearLobbyDoor && !hasVisitedAuditorium) {
+            showDialogue("Usher: Stage door will be opened after the show!");
           }
           break;
         case 'KeyG': if (isHoveringPerformer && performerArrived) receiveAutograph(); break;
@@ -399,10 +453,6 @@ const App: React.FC = () => {
           else if (targetChair && playerPositionRef.current.z <= 0.5) { setIsSitting(true); setSittingChair(targetChair); }
           break;
         case 'Space': case 'Enter': if (cameraMode) takePhoto(); break;
-        case 'Escape': 
-          if (isReading) setIsReading(false);
-          else if (isPhoneActive) handlePhoneClose();
-          break;
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -427,7 +477,7 @@ const App: React.FC = () => {
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('wheel', handleWheel);
     };
-  }, [isLocked, hasStarted, cameraMode, galleryOpen, isPhoneActive, handlePhoneClose, nearAuditoriumDoor, nearLobbyDoor, targetChair, isSitting, takePhoto, activeSlot, hotbar, isHoveringUsher, isHoveringPerformer, performerArrived, receiveBook, receiveAutograph, triggerHotbar, isReading, isHoldingBook, nextPage, prevPage, showDialogue, auditoriumDoorOpen, isTouchDevice]);
+  }, [isLocked, hasStarted, cameraMode, galleryOpen, isPhoneActive, handlePhoneClose, nearAuditoriumDoor, nearLobbyDoor, targetChair, isSitting, takePhoto, activeSlot, hotbar, isHoveringUsher, isHoveringPerformer, performerArrived, receiveBook, receiveAutograph, triggerHotbar, isReading, isHoldingBook, nextPage, prevPage, showDialogue, auditoriumDoorOpen, isTouchDevice, hasVisitedAuditorium]);
 
   useEffect(() => {
     let text: string | null = null;
@@ -435,8 +485,8 @@ const App: React.FC = () => {
     const isInside = playerPositionRef.current.z <= 0.5;
 
     if (activeDialogue) { text = activeDialogue; key = 'dialogue'; }
-    else if (isReading) { text = "Press [ESC] to Stop Reading or Arrows to Turn Pages"; key = 'reading'; }
-    else if (isPhoneActive) { text = "Press [ESC] to close phone"; key = 'phone-active'; }
+    else if (isReading) { text = "Reading Mode | Press [ESC] to Stop"; key = 'reading'; }
+    else if (galleryOpen) { text = "Gallery View | [V] or [ESC] to Exit"; key = 'gallery-active'; }
     else if (isSitting) { text = "Press [F] to Stand"; key = 'sit-stand'; }
     else if (targetChair && isInside) { text = "Press [F] to Sit"; key = `sit-chair-${targetChair}`; }
     else if (isHoveringUsher) {
@@ -444,11 +494,14 @@ const App: React.FC = () => {
        else { text = "Press [R] to ask Usher to open doors"; key = 'usher-reopen'; }
     } else if (nearAuditoriumDoor && !auditoriumDoorOpen && !isInside) {
        text = "Talk to the Usher to enter"; key = 'usher-needed';
+    } else if (nearLobbyDoor && !hasVisitedAuditorium) {
+       text = "Press [R] to check Stage Door"; key = 'lobby-locked';
     } else if (isHoveringPerformer && performerArrived) {
        text = "Press [G] to ask for Autograph"; key = 'performer';
     } else if (nearStageDoor && !performerArrived) { 
-       text = hasVisitedAuditorium ? "Fans: Is she coming out yet?" : "Stage Door is strictly restricted."; key = 'fans'; 
+       text = hasVisitedAuditorium ? "Fans: Is she coming out yet?" : "Stage Door area restricted."; key = 'fans'; 
     }
+    else if (cameraMode) { text = "Camera Mode | [Left Click] to Shoot | [V] for Gallery"; key = 'camera-active'; }
     else if (isHoldingBook) { text = "Left Click to Read Program"; key = 'book-hint'; }
     else if (isHoldingOperaGlass && !isZooming) { text = "Hold [Z] or Right Click to Zoom"; key = 'zoom-hint'; }
 
@@ -462,7 +515,7 @@ const App: React.FC = () => {
           setInteractionText(null);
         }
     }
-  }, [nearAuditoriumDoor, nearLobbyDoor, auditoriumDoorOpen, lobbyDoorOpen, targetChair, isSitting, isHoveringUsher, isHoveringPerformer, performerArrived, nearStageDoor, hotbar, isReading, isHoldingBook, activeDialogue, cameraMode, isZooming, isHoldingOperaGlass, hasStarted, isLocked, hasVisitedAuditorium, isPhoneActive]);
+  }, [nearAuditoriumDoor, nearLobbyDoor, auditoriumDoorOpen, lobbyDoorOpen, targetChair, isSitting, isHoveringUsher, isHoveringPerformer, performerArrived, nearStageDoor, hotbar, isReading, isHoldingBook, activeDialogue, cameraMode, isZooming, isHoldingOperaGlass, hasStarted, isLocked, hasVisitedAuditorium, isPhoneActive, galleryOpen]);
 
   const deletePhoto = (index: number) => {
     setInventory(prev => prev.filter((_, i) => i !== index));
@@ -508,7 +561,38 @@ const App: React.FC = () => {
 
       <div className={`absolute inset-0 bg-white pointer-events-none z-[100] transition-opacity duration-150 ${flash ? 'opacity-100' : 'opacity-0'}`} />
 
-      {isLocked && !isReading && !isPhoneActive && (
+      {hasStarted && !isLocked && !isReading && !galleryOpen && !cameraMode && !isTouchDevice && (
+        <div className="absolute inset-0 z-[160] flex flex-col items-center justify-center bg-black/70 backdrop-blur-[12px] cursor-default pointer-events-auto animate-in fade-in duration-300">
+           <div 
+             className="p-12 bg-zinc-900/95 rounded-[40px] border border-white/20 shadow-4xl flex flex-col items-center max-w-sm text-center animate-in zoom-in duration-300"
+             onClick={(e) => e.stopPropagation()}
+           >
+             <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center mb-8 border border-white/20 shadow-inner">
+               <MousePointer2 size={32} className="text-white opacity-90 animate-pulse" />
+             </div>
+             <h2 className="text-white text-xl font-black uppercase tracking-tighter mb-2">Theater Paused</h2>
+             <p className="text-white/40 text-[10px] mb-8 uppercase tracking-[0.2em] font-bold leading-relaxed">Your cursor is currently free. You can use your browser or click below to return to the experience.</p>
+             
+             <div className="flex flex-col gap-3 w-full">
+               <button 
+                 onClick={() => { try { controlsRef.current?.lock(); } catch(e) {} }}
+                 className="w-full py-4 bg-white text-black font-black uppercase tracking-[0.3em] text-[10px] rounded-2xl hover:scale-105 transition-transform shadow-xl"
+               >
+                 Resume Experience
+               </button>
+               <button 
+                 onClick={() => window.location.reload()}
+                 className="w-full py-3 bg-zinc-800 text-white/50 font-black uppercase tracking-[0.3em] text-[9px] rounded-2xl hover:bg-zinc-700 transition-colors"
+               >
+                 Emergency Reset
+               </button>
+             </div>
+           </div>
+           <p className="mt-12 text-white/30 text-[9px] font-black uppercase tracking-[0.6em] animate-pulse">Cursor Unlocked | Press [ESC] to release cursor at any time</p>
+        </div>
+      )}
+
+      {isLocked && !isReading && !galleryOpen && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[80] pointer-events-none flex items-center justify-center">
            <div className={`w-1 h-1 bg-white rounded-full transition-all duration-300 ${interactionText ? 'scale-[6] opacity-0' : 'opacity-100'}`} />
            <div className={`absolute w-6 h-6 border-2 border-white/50 rounded-full transition-all duration-300 ${interactionText ? 'scale-110 opacity-100' : 'scale-50 opacity-0'}`} />
@@ -533,12 +617,10 @@ const App: React.FC = () => {
                     alt={`Program Page ${currentPage + 1}`}
                     loading="eager"
                  />
-                 
                  <div className="absolute inset-0 flex justify-between items-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                     <button onClick={prevPage} className="p-4 bg-black/40 text-white rounded-r-full hover:bg-black/60 transition-colors pointer-events-auto ml-2"><ChevronLeft size={48} /></button>
                     <button onClick={nextPage} className="p-4 bg-black/40 text-white rounded-l-full hover:bg-black/60 transition-colors pointer-events-auto mr-2"><ChevronRight size={48} /></button>
                  </div>
-
                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-black/60 rounded-full text-white/60 text-[10px] font-black uppercase tracking-[0.3em]">
                     Page {currentPage + 1} / {PROGRAM_PAGES.length}
                  </div>
@@ -549,14 +631,14 @@ const App: React.FC = () => {
       )}
 
       {!hasStarted && (
-        <div className="absolute inset-0 flex items-center justify-center z-[150] bg-zinc-950">
-          <div className="text-center p-6 sm:p-12 max-w-lg">
+        <div className="absolute inset-0 flex items-center justify-center z-[200] bg-zinc-950">
+          <div className="text-center p-6 sm:p-12 max-w-lg animate-in fade-in duration-700">
             <h1 className="text-5xl sm:text-7xl font-black mb-4 text-white tracking-tighter uppercase">THEATER</h1>
             <div className="w-24 h-1 bg-white mx-auto mb-8"></div>
             <p className="text-zinc-500 mb-10 text-[10px] uppercase tracking-[0.3em] leading-loose">White Lobby | Black Auditorium</p>
             <div className="flex flex-col gap-4">
               <button className="px-12 py-5 bg-white text-black font-black hover:scale-105 transition-transform uppercase tracking-[0.2em] text-[10px] shadow-2xl" 
-                      onClick={() => { setHasStarted(true); if (!isTouchDevice) controlsRef.current?.lock(); else setIsLocked(true); }}>Enter Theater</button>
+                      onClick={() => { setHasStarted(true); if (!isTouchDevice) { setTimeout(() => controlsRef.current?.lock(), 100); } else setIsLocked(true); }}>Enter Experience</button>
               <button className="px-12 py-3 bg-zinc-800 text-white font-black hover:bg-zinc-700 transition-colors uppercase tracking-[0.2em] text-[10px]" 
                       onClick={toggleFullscreen}><Maximize size={14} className="inline mr-2" /> Full Screen</button>
             </div>
@@ -576,14 +658,15 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {interactionText && !isPhoneActive && (
+      {interactionText && !galleryOpen && (
         <div className="absolute top-[65%] left-1/2 -translate-x-1/2 z-[90] pointer-events-none">
-          <div className="bg-white/90 backdrop-blur-md text-black px-6 py-3 rounded-full text-[10px] font-black uppercase tracking-widest shadow-2xl animate-in fade-in zoom-in duration-500">{interactionText}</div>
+          <div className="bg-white/90 backdrop-blur-md text-black px-6 py-3 rounded-full text-[10px] font-black uppercase tracking-widest shadow-2xl animate-in fade-in zoom-in duration-500 text-center whitespace-nowrap">{interactionText}</div>
         </div>
       )}
 
       {hasStarted && (
         <div className="absolute inset-0 z-50 pointer-events-none overflow-hidden">
+          {/* HAND TOOLS VIEW */}
           <div className={`absolute bottom-[-20px] left-[-30px] w-[180px] sm:w-[240px] h-[300px] sm:h-[360px] transition-all duration-700 ease-out origin-bottom-left rotate-[8deg] ${isZooming && isHoldingOperaGlass ? 'translate-y-40 scale-75 opacity-0' : ''} ${isReading || isPhoneActive ? 'translate-y-60 opacity-0' : ''}`}>
              {activeItem === 'OPERA_GLASS' ? (
                 <div className="w-full h-full relative">
@@ -607,6 +690,7 @@ const App: React.FC = () => {
              )}
           </div>
 
+          {/* SMARTPHONE UI */}
           <div className={`absolute transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] flex items-center justify-center ${isPhoneActive ? 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] max-w-[850px] h-[65%] z-50' : 'bottom-[-40px] right-[-40px] w-[180px] sm:w-[240px] h-[300px] sm:h-[380px] rotate-[-10deg]'} ${isReading ? 'opacity-0 scale-50' : ''}`}>
             <div className={`relative border-4 border-zinc-900 shadow-2xl transition-all duration-700 overflow-hidden ${isPhoneActive ? 'w-full h-full rotate-0 rounded-[30px] border-[12px] border-zinc-900/90' : 'w-full h-full rounded-[40px] bg-zinc-950'} ${cameraMode ? 'bg-transparent' : 'bg-zinc-950'}`}>
               <div className="w-full h-full relative flex flex-col pointer-events-auto bg-transparent">
@@ -624,11 +708,19 @@ const App: React.FC = () => {
                         <div className="absolute bottom-4 right-4 w-8 h-8 border-b-2 border-r-2 border-white/40" />
                         <div className="absolute inset-0 flex items-center justify-center">
                            <div className="w-48 h-48 border border-white/20 rounded-full animate-pulse" />
-                           {activePoster && <div className="absolute flex flex-col items-center"><Scan size={120} className="text-white drop-shadow-glow" /><span className="mt-4 bg-white text-black px-4 py-1 text-[10px] font-black uppercase tracking-widest rounded-full">{activePoster}</span></div>}
+                           {activePoster && <div className="absolute flex flex-col items-center"><Scan size={120} className="text-white drop-shadow-glow" /><span className="mt-4 bg-white text-black px-4 py-1 text-[10px] font-black uppercase tracking-widest rounded-full text-center">{activePoster}</span></div>}
                         </div>
-                        <div className="absolute inset-0 z-10 overflow-hidden pointer-events-none">
+                        <div className="absolute inset-0 z-10 overflow-hidden pointer-events-none flex items-center justify-center p-6">
                            {isVideoLoading && <div className="absolute inset-0 flex items-center justify-center bg-black/40"><Loader2 className="animate-spin text-white" /></div>}
-                           <video ref={videoRef} className="w-full h-full object-cover transition-opacity duration-500" style={{ opacity: videoOpacity }} loop muted playsInline onPlaying={() => { setIsVideoLoading(false); setVideoOpacity(1); }} />
+                           <video 
+                              ref={videoRef} 
+                              className="max-w-full max-h-full object-contain transition-opacity duration-500 shadow-2xl rounded-lg" 
+                              style={{ opacity: videoOpacity }} 
+                              loop 
+                              muted 
+                              playsInline 
+                              onPlaying={() => { setIsVideoLoading(false); setVideoOpacity(1); }} 
+                           />
                         </div>
                     </div>
                     <div className="mt-auto p-10 flex items-center justify-between w-full bg-gradient-to-t from-black/40 to-transparent relative z-20">
@@ -640,7 +732,7 @@ const App: React.FC = () => {
                     </div>
                   </>
                 ) : galleryOpen ? (
-                  <div className="absolute inset-0 bg-zinc-950 z-[60] flex flex-col animate-in slide-in-from-bottom duration-500">
+                  <div className="absolute inset-0 bg-zinc-950 z-[60] flex flex-col animate-in slide-in-from-bottom duration-500 pointer-events-auto">
                     <div className="p-8 flex justify-between items-center border-b border-white/5">
                       <div className="flex items-center gap-4">
                         {selectedPhotoIndex !== null && <button onClick={() => setSelectedPhotoIndex(null)} className="text-white hover:text-white/70"><ChevronLeft size={24} /></button>}
@@ -690,10 +782,10 @@ const App: React.FC = () => {
                     <div className="text-white text-4xl sm:text-6xl font-black tracking-tighter mb-2">{formattedTime}</div>
                     <div className="text-zinc-600 text-[10px] font-black uppercase tracking-widest mb-16">{formattedDate}</div>
                     <div className="grid grid-cols-2 gap-4">
-                      <button onClick={() => { setCameraMode(true); if(!isTouchDevice) controlsRef.current?.unlock(); }} className="aspect-square bg-zinc-900 rounded-[24px] flex items-center justify-center text-white hover:bg-zinc-800 transition-all hover:scale-105 shadow-2xl"><Camera size={32} /></button>
-                      <button onClick={() => { setGalleryOpen(true); if(!isTouchDevice) controlsRef.current?.unlock(); }} className="aspect-square bg-zinc-900 rounded-[24px] flex items-center justify-center text-white hover:bg-zinc-800 transition-all hover:scale-105 shadow-2xl"><ImageIcon size={32} /></button>
+                      <button onClick={() => { setCameraMode(true); }} className="aspect-square bg-zinc-900 rounded-[24px] flex items-center justify-center text-white hover:bg-zinc-800 transition-all hover:scale-105 shadow-2xl"><Camera size={32} /></button>
+                      <button onClick={() => { setGalleryOpen(true); }} className="aspect-square bg-zinc-900 rounded-[24px] flex items-center justify-center text-white hover:bg-zinc-800 transition-all hover:scale-105 shadow-2xl"><ImageIcon size={32} /></button>
                     </div>
-                    <div className="mt-auto text-center opacity-30 text-[8px] uppercase font-black tracking-[0.4em] text-white animate-pulse">Press [C] for Camera</div>
+                    <div className="mt-auto text-center opacity-30 text-[8px] uppercase font-black tracking-[0.4em] text-white animate-pulse">Press [C] for Camera | [V] for Gallery</div>
                   </div>
                 )}
               </div>
@@ -702,6 +794,7 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {/* HOTBAR */}
       {hasStarted && (
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-50 flex gap-3 p-2 sm:p-3 bg-black/80 backdrop-blur-xl rounded-2xl border border-white/10 transition-opacity duration-500"
              style={{ opacity: hotbarOpacity }}>

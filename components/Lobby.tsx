@@ -1,7 +1,7 @@
 
 import React, { useRef, Suspense, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { DoubleSide, Object3D, PointLight } from 'three';
+import { DoubleSide, Object3D } from 'three';
 import { useGLTF, useAnimations, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 
@@ -43,11 +43,10 @@ const Usher: React.FC = () => {
     });
 
     if (actions && Object.keys(actions).length > 0) {
-      const actionName = Object.keys(actions)[0];
-      const action = actions[actionName];
-      if (action) {
-        action.reset().fadeIn(0.5).play();
-        action.setEffectiveTimeScale(1.0);
+      const activeAction = actions[Object.keys(actions)[0]];
+      if (activeAction) {
+        activeAction.reset().fadeIn(0.5).play();
+        activeAction.setEffectiveTimeScale(1.0);
       }
     }
   }, [actions, scene]);
@@ -116,7 +115,7 @@ const StagePerformer: React.FC<{ index: number }> = ({ index }) => {
 };
 
 const PaparazziFlash: React.FC<{ position: [number, number, number] }> = ({ position }) => {
-  const lightRef = useRef<PointLight>(null);
+  const lightRef = useRef<THREE.PointLight>(null);
   const flashIntensity = useRef(0);
 
   useFrame(() => {
@@ -139,18 +138,15 @@ const Performer: React.FC<{ isSigning: boolean }> = ({ isSigning }) => {
 
   useFrame((state) => {
     if (groupRef.current) {
-      // Walk towards the player on red carpet
       groupRef.current.position.z = THREE.MathUtils.lerp(groupRef.current.position.z, targetZ, 0.015);
       
       const walkProgress = Math.abs(groupRef.current.position.z - targetZ);
       if (walkProgress > 0.05) {
-         // Bobbing while walking
          groupRef.current.position.y = Math.sin(state.clock.elapsedTime * 6) * 0.08 + 1.2;
       } else {
          groupRef.current.position.y = THREE.MathUtils.lerp(groupRef.current.position.y, 1.2, 0.1);
       }
 
-      // Interaction reaction
       if (isSigning) {
         groupRef.current.scale.lerp(new THREE.Vector3(1.2, 1.2, 1.2), 0.1);
       } else {
@@ -161,7 +157,6 @@ const Performer: React.FC<{ isSigning: boolean }> = ({ isSigning }) => {
 
   return (
     <group ref={groupRef} position={[0, 1.2, startZ]} userData={{ type: 'performer' }}>
-       {/* Simple placeholding box as requested */}
        <mesh castShadow>
           <boxGeometry args={[0.8, 2.4, 0.5]} />
           <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={0.5} />
@@ -211,25 +206,59 @@ const Chandelier: React.FC<{ position: [number, number, number], scale: number }
   );
 };
 
+const PosterWithLight: React.FC<{ 
+  position: [number, number, number], 
+  rotation: [number, number, number], 
+  texture: THREE.Texture, 
+  name: string, 
+  highlighted: boolean 
+}> = ({ position, rotation, texture, name, highlighted }) => {
+  return (
+    <group position={position} rotation={rotation}>
+      <spotLight 
+        position={[0, 2.5, 1.5]} 
+        target-position={[0, 0, 0]} 
+        intensity={12} 
+        angle={0.35} 
+        penumbra={0.6} 
+        color="#fff4e0" 
+      />
+      <mesh name={name} userData={{ type: 'poster' }}>
+        <planeGeometry args={[2, 3]} />
+        <meshStandardMaterial 
+          map={texture} 
+          emissive="#ffffff" 
+          emissiveMap={texture} 
+          emissiveIntensity={highlighted ? 1.0 : 0.08} 
+        />
+      </mesh>
+      <mesh position={[0, 0, -0.05]}>
+        <boxGeometry args={[2.2, 3.2, 0.08]} />
+        <meshStandardMaterial color="#ffd700" metalness={0.9} roughness={0.1} />
+      </mesh>
+    </group>
+  );
+};
+
 const TheaterSeat: React.FC<{ position: [number, number, number], name: string }> = ({ position, name }) => {
   const [x, y, z] = position;
   return (
     <group position={[x, y, z]} rotation={[0, Math.PI, 0]}>
       <mesh name={name} userData={{ type: 'chair' }} position={[0, 0.4, 0]} castShadow>
         <boxGeometry args={[0.9, 0.15, 0.8]} />
-        <meshStandardMaterial color="#800000" roughness={0.4} />
+        <meshStandardMaterial color="#600000" roughness={0.4} />
       </mesh>
       <mesh position={[0, 0.8, -0.35]} castShadow>
         <boxGeometry args={[0.9, 0.9, 0.1]} />
-        <meshStandardMaterial color="#800000" roughness={0.4} />
+        <meshStandardMaterial color="#600000" roughness={0.4} />
       </mesh>
       <mesh position={[-0.48, 0.55, 0]} castShadow>
         <boxGeometry args={[0.08, 0.1, 0.6]} />
-        <meshStandardMaterial color="#222" />
+        <meshStandardMaterial color="#111" />
       </mesh>
       <mesh position={[0.48, 0.55, 0]} castShadow>
         <boxGeometry args={[0.08, 0.1, 0.6]} />
-        <meshStandardMaterial color="#222" />
+        <meshStandardMaterial color="#111" />
       </mesh>
     </group>
   );
@@ -248,6 +277,44 @@ const AuditoriumWallLight: React.FC<{ position: [number, number, number] }> = ({
     <pointLight intensity={8} distance={10} color="#ffcc88" decay={2} />
   </group>
 );
+
+const Stanchion: React.FC<{ position: [number, number, number] }> = ({ position }) => (
+  <group position={position}>
+    <mesh castShadow position={[0, 0.02, 0]}>
+      <cylinderGeometry args={[0.18, 0.18, 0.05, 16]} />
+      <meshStandardMaterial color="#ffd700" metalness={1} roughness={0.1} />
+    </mesh>
+    <mesh castShadow position={[0, 0.6, 0]}>
+      <cylinderGeometry args={[0.035, 0.035, 1.2, 16]} />
+      <meshStandardMaterial color="#ffd700" metalness={1} roughness={0.1} />
+    </mesh>
+    <mesh castShadow position={[0, 1.2, 0]}>
+      <sphereGeometry args={[0.07, 16, 16]} />
+      <meshStandardMaterial color="#ffd700" metalness={1} roughness={0.1} />
+    </mesh>
+  </group>
+);
+
+const VelvetRope: React.FC<{ start: [number, number, number], end: [number, number, number] }> = ({ start, end }) => {
+  const [x1, y1, z1] = start;
+  const [x2, y2, z2] = end;
+  const midX = (x1 + x2) / 2;
+  const midY = (y1 + y2) / 2 - 0.25; 
+  const midZ = (z1 + z2) / 2;
+  
+  const curve = new THREE.QuadraticBezierCurve3(
+    new THREE.Vector3(x1, y1 + 1.1, z1),
+    new THREE.Vector3(midX, midY + 1.1, midZ),
+    new THREE.Vector3(x2, y2 + 1.1, z2)
+  );
+
+  return (
+    <mesh>
+      <tubeGeometry args={[curve, 32, 0.03, 12, false]} />
+      <meshStandardMaterial color="#900000" roughness={0.7} />
+    </mesh>
+  );
+};
 
 const Lobby: React.FC<LobbyProps> = ({ 
   highlightedPoster, 
@@ -268,7 +335,6 @@ const Lobby: React.FC<LobbyProps> = ({
   const leftLobbyDoorRef = useRef<THREE.Group>(null);
   const rightLobbyDoorRef = useRef<THREE.Group>(null);
 
-  // Load Poster Textures
   const posterTextures = useTexture([
     "https://raw.githubusercontent.com/heyitisjee/theater-assets/b1960f5ef0a3ec18401b799b50491f642393eb17/poster1.png",
     "https://raw.githubusercontent.com/heyitisjee/theater-assets/main/poster2.png",
@@ -293,62 +359,113 @@ const Lobby: React.FC<LobbyProps> = ({
     }
   });
 
+  const posterY = 3.0;
+
+  // Reusable wall material for consistent broadway theater look - Uniform across all walls
+  const WallMaterial = () => <meshStandardMaterial color="#fdfcf0" roughness={0.35} metalness={0.05} side={DoubleSide} />;
+  const DoorMaterial = () => <meshStandardMaterial color="#1a0401" roughness={0.15} metalness={0.1} />;
+
+  const stanchionPositions = [-7, -5, -3, -1, 1, 3, 5, 7];
+  const externalStanchionPositions = [0, 2, 4, 6, 8, 10, 12, 14];
+
   return (
     <group>
-      <hemisphereLight intensity={0.4} groundColor="#000" color="#ffffff" />
+      <hemisphereLight intensity={0.65} groundColor="#111" color="#ffffff" />
       
       <group position={[0, 0, lobbyDepth / 2]}>
+         {/* Lobby Floor */}
          <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
             <planeGeometry args={[lobbyWidth, lobbyDepth]} />
-            <meshStandardMaterial color="#ffffff" roughness={0.05} metalness={0.05} />
+            <meshStandardMaterial color="#f0f0f0" roughness={0.04} metalness={0.1} />
          </mesh>
+
+         {/* Broadway Red Carpet - Precise fit (0 to 15 world) */}
+         <mesh position={[0, 0.015, 0.05]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+            <planeGeometry args={[3.2, 14.9]} />
+            <meshStandardMaterial color="#8b0000" roughness={0.8} />
+         </mesh>
+
+         {/* Stanchions and Ropes - Lining the lobby length */}
+         {stanchionPositions.map((z, i) => (
+           <React.Fragment key={`stanchion-pair-${i}`}>
+              <Stanchion position={[1.8, 0, z]} />
+              <Stanchion position={[-1.8, 0, z]} />
+              {i < stanchionPositions.length - 1 && (
+                <>
+                  <VelvetRope start={[1.8, 0, z]} end={[1.8, 0, stanchionPositions[i+1]]} />
+                  <VelvetRope start={[-1.8, 0, z]} end={[-1.8, 0, stanchionPositions[i+1]]} />
+                </>
+              )}
+           </React.Fragment>
+         ))}
+
+         {/* Walls - Uniform Broadway Aesthetic */}
          <mesh position={[-lobbyWidth/2, lobbyHeight/2, 0]} rotation={[0, Math.PI/2, 0]}>
             <planeGeometry args={[lobbyDepth, lobbyHeight]} />
-            <meshStandardMaterial color="#ffffff" side={DoubleSide} />
+            <WallMaterial />
          </mesh>
          <mesh position={[lobbyWidth/2, lobbyHeight/2, 0]} rotation={[0, -Math.PI/2, 0]}>
             <planeGeometry args={[lobbyDepth, lobbyHeight]} />
-            <meshStandardMaterial color="#ffffff" side={DoubleSide} />
+            <WallMaterial />
          </mesh>
 
-         {/* POSTERS - LEFT WALL (Consecutive 1, 2, 3) */}
-         <mesh name="Crimson Specter Poster" userData={{ type: 'poster' }} position={[-lobbyWidth / 2 + 0.1, 1.7, -4]} rotation={[0, Math.PI / 2, 0]}>
-            <planeGeometry args={[2, 3]} />
-            <meshStandardMaterial map={posterTextures[0]} emissive="#ffffff" emissiveMap={posterTextures[0]} emissiveIntensity={highlightedPoster === "Crimson Specter Poster" ? 0.8 : 0.1} />
-         </mesh>
-         <mesh name="Azure Echo Poster" userData={{ type: 'poster' }} position={[-lobbyWidth / 2 + 0.1, 1.7, 0]} rotation={[0, Math.PI / 2, 0]}>
-            <planeGeometry args={[2, 3]} />
-            <meshStandardMaterial map={posterTextures[1]} emissive="#ffffff" emissiveMap={posterTextures[1]} emissiveIntensity={highlightedPoster === "Azure Echo Poster" ? 0.8 : 0.1} />
-         </mesh>
-         <mesh name="Midnight Whispers Poster" userData={{ type: 'poster' }} position={[-lobbyWidth / 2 + 0.1, 1.7, 4]} rotation={[0, Math.PI / 2, 0]}>
-            <planeGeometry args={[2, 3]} />
-            <meshStandardMaterial map={posterTextures[2]} emissive="#ffffff" emissiveMap={posterTextures[2]} emissiveIntensity={highlightedPoster === "Midnight Whispers Poster" ? 0.8 : 0.1} />
-         </mesh>
+         {/* Poster Spotlights and Frames */}
+         <PosterWithLight 
+            name="First Filter Poster" 
+            position={[-lobbyWidth / 2 + 0.12, posterY, -4.5]} 
+            rotation={[0, Math.PI / 2, 0]} 
+            texture={posterTextures[0]} 
+            highlighted={highlightedPoster === "First Filter Poster"} 
+         />
+         <PosterWithLight 
+            name="Korean Theater Poster 1" 
+            position={[-lobbyWidth / 2 + 0.12, posterY, 0]} 
+            rotation={[0, Math.PI / 2, 0]} 
+            texture={posterTextures[1]} 
+            highlighted={highlightedPoster === "Korean Theater Poster 1"} 
+         />
+         <PosterWithLight 
+            name="Korean Theater Poster 2" 
+            position={[-lobbyWidth / 2 + 0.12, posterY, 4.5]} 
+            rotation={[0, Math.PI / 2, 0]} 
+            texture={posterTextures[2]} 
+            highlighted={highlightedPoster === "Korean Theater Poster 2"} 
+         />
 
-         {/* POSTERS - RIGHT WALL (Consecutive 4, 5, 6) */}
-         <mesh name="Emerald Voyage Poster" userData={{ type: 'poster' }} position={[lobbyWidth / 2 - 0.1, 1.7, -4]} rotation={[0, -Math.PI / 2, 0]}>
-            <planeGeometry args={[2, 3]} />
-            <meshStandardMaterial map={posterTextures[3]} emissive="#ffffff" emissiveMap={posterTextures[3]} emissiveIntensity={highlightedPoster === "Emerald Voyage Poster" ? 0.8 : 0.1} />
-         </mesh>
-         <mesh name="Solar Flare Poster" userData={{ type: 'poster' }} position={[lobbyWidth / 2 - 0.1, 1.7, 0]} rotation={[0, -Math.PI / 2, 0]}>
-            <planeGeometry args={[2, 3]} />
-            <meshStandardMaterial map={posterTextures[4]} emissive="#ffffff" emissiveMap={posterTextures[4]} emissiveIntensity={highlightedPoster === "Solar Flare Poster" ? 0.8 : 0.1} />
-         </mesh>
-         <mesh name="Golden Odyssey Poster" userData={{ type: 'poster' }} position={[lobbyWidth / 2 - 0.1, 1.7, 4]} rotation={[0, -Math.PI / 2, 0]}>
-            <planeGeometry args={[2, 3]} />
-            <meshStandardMaterial map={posterTextures[5]} emissive="#ffffff" emissiveMap={posterTextures[5]} emissiveIntensity={highlightedPoster === "Golden Odyssey Poster" ? 0.8 : 0.1} />
-         </mesh>
+         <PosterWithLight 
+            name="Theater Club Promotion Poster" 
+            position={[lobbyWidth / 2 - 0.12, posterY, -4.5]} 
+            rotation={[0, -Math.PI / 2, 0]} 
+            texture={posterTextures[3]} 
+            highlighted={highlightedPoster === "Theater Club Promotion Poster"} 
+         />
+         <PosterWithLight 
+            name="Broadway Playbill Poster" 
+            position={[lobbyWidth / 2 - 0.12, posterY, 0]} 
+            rotation={[0, -Math.PI / 2, 0]} 
+            texture={posterTextures[4]} 
+            highlighted={highlightedPoster === "Broadway Playbill Poster"} 
+         />
+         <PosterWithLight 
+            name="Theater & AR Portfolio poster" 
+            position={[lobbyWidth / 2 - 0.12, posterY, 4.5]} 
+            rotation={[0, -Math.PI / 2, 0]} 
+            texture={posterTextures[5]} 
+            highlighted={highlightedPoster === "Theater & AR Portfolio poster"} 
+         />
       </group>
 
+      {/* Main Entrance Wall */}
       <group position={[0, lobbyHeight / 2, 15]}>
-          <mesh position={[-5, 0, 0]}><boxGeometry args={[6, lobbyHeight, 0.5]} /><meshStandardMaterial color="#ffffff" /></mesh>
-          <mesh position={[5, 0, 0]}><boxGeometry args={[6, lobbyHeight, 0.5]} /><meshStandardMaterial color="#ffffff" /></mesh>
-          <mesh position={[0, 2, 0]}><boxGeometry args={[4, 4, 0.5]} /><meshStandardMaterial color="#ffffff" /></mesh>
+          <mesh position={[-5, 0, 0]}><boxGeometry args={[6, lobbyHeight, 0.5]} /><WallMaterial /></mesh>
+          <mesh position={[5, 0, 0]}><boxGeometry args={[6, lobbyHeight, 0.5]} /><WallMaterial /></mesh>
+          <mesh position={[0, 2, 0]}><boxGeometry args={[4, 4, 0.5]} /><WallMaterial /></mesh>
       </group>
+      {/* Auditorium Entrance Wall */}
       <group position={[0, lobbyHeight / 2, 0]}>
-          <mesh position={[-5, 0, 0]}><boxGeometry args={[6, lobbyHeight, 0.5]} /><meshStandardMaterial color="#ffffff" /></mesh>
-          <mesh position={[5, 0, 0]}><boxGeometry args={[6, lobbyHeight, 0.5]} /><meshStandardMaterial color="#ffffff" /></mesh>
-          <mesh position={[0, 2, 0]}><boxGeometry args={[4, 4, 0.5]} /><meshStandardMaterial color="#ffffff" /></mesh>
+          <mesh position={[-5, 0, 0]}><boxGeometry args={[6, lobbyHeight, 0.5]} /><WallMaterial /></mesh>
+          <mesh position={[5, 0, 0]}><boxGeometry args={[6, lobbyHeight, 0.5]} /><WallMaterial /></mesh>
+          <mesh position={[0, 2, 0]}><boxGeometry args={[4, 4, 0.5]} /><WallMaterial /></mesh>
       </group>
 
       <mesh position={[0, lobbyHeight, lobbyDepth/2]} rotation={[Math.PI/2, 0, 0]}>
@@ -356,19 +473,26 @@ const Lobby: React.FC<LobbyProps> = ({
          <meshStandardMaterial color="#ffffff" />
       </mesh>
 
+      {/* Doors */}
       <group position={[2, 0, 0]} ref={rightAudDoorRef}>
-        <mesh position={[-1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><meshStandardMaterial color="#400" /></mesh>
+        <mesh position={[-1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><DoorMaterial /></mesh>
+        <mesh position={[-1.8, 2, 0.12]}><sphereGeometry args={[0.08, 16, 16]} /><meshStandardMaterial color="#ffd700" metalness={1} /></mesh>
       </group>
       <group position={[-2, 0, 0]} ref={leftAudDoorRef}>
-        <mesh position={[1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><meshStandardMaterial color="#400" /></mesh>
-      </group>
-      <group position={[2, 0, 15]} ref={rightLobbyDoorRef}>
-        <mesh position={[-1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><meshStandardMaterial color="#eee" /></mesh>
-      </group>
-      <group position={[-2, 0, 15]} ref={leftLobbyDoorRef}>
-        <mesh position={[1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><meshStandardMaterial color="#eee" /></mesh>
+        <mesh position={[1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><DoorMaterial /></mesh>
+        <mesh position={[1.8, 2, 0.12]}><sphereGeometry args={[0.08, 16, 16]} /><meshStandardMaterial color="#ffd700" metalness={1} /></mesh>
       </group>
 
+      <group position={[2, 0, 15]} ref={rightLobbyDoorRef}>
+        <mesh position={[-1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><DoorMaterial /></mesh>
+        <mesh position={[-1.8, 2, -0.12]}><sphereGeometry args={[0.08, 16, 16]} /><meshStandardMaterial color="#ffd700" metalness={1} /></mesh>
+      </group>
+      <group position={[-2, 0, 15]} ref={leftLobbyDoorRef}>
+        <mesh position={[1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><DoorMaterial /></mesh>
+        <mesh position={[1.8, 2, -0.12]}><sphereGeometry args={[0.08, 16, 16]} /><meshStandardMaterial color="#ffd700" metalness={1} /></mesh>
+      </group>
+
+      {/* Auditorium Area */}
       <group position={[0, 0, -12.5]}>
          <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
             <planeGeometry args={[lobbyWidth, 25]} />
@@ -401,7 +525,7 @@ const Lobby: React.FC<LobbyProps> = ({
          </group>
          <Suspense fallback={null}>
             <StageModel />
-            <spotLight position={[0, 10, -10.5]} intensity={15} angle={0.6} penumbra={1} color="#ffffff" />
+            <spotLight position={[0, 12, -10.5]} intensity={18} angle={0.55} penumbra={1} color="#ffffff" />
             <StagePerformer index={stagePerformerIndex} />
          </Suspense>
       </group>
@@ -414,6 +538,7 @@ const Lobby: React.FC<LobbyProps> = ({
         <Usher />
       </Suspense>
 
+      {/* External Area - Stage Door Barricades Restored */}
       <group position={[0, 0, 15]}>
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 7.5]}>
             <planeGeometry args={[20, 15]} />
@@ -423,25 +548,32 @@ const Lobby: React.FC<LobbyProps> = ({
             <planeGeometry args={[3.0, 15]} />
             <meshStandardMaterial color="#700" />
           </mesh>
-          <group position={[2.5, 0, 7.5]}>
-             <mesh position={[0, 0.5, 0]}><boxGeometry args={[0.2, 1, 15]} /><meshStandardMaterial color="#222" /></mesh>
-             <mesh position={[0, 1, 0]}><boxGeometry args={[0.1, 0.1, 15]} /><meshStandardMaterial color="#bbb" metalness={1} roughness={0.1} /></mesh>
-          </group>
-          <group position={[-2.5, 0, 7.5]}>
-             <mesh position={[0, 0.5, 0]}><boxGeometry args={[0.2, 1, 15]} /><meshStandardMaterial color="#222" /></mesh>
-             <mesh position={[0, 1, 0]}><boxGeometry args={[0.1, 0.1, 15]} /><meshStandardMaterial color="#bbb" metalness={1} roughness={0.1} /></mesh>
-          </group>
+
+          {/* Restored Barricades for the External Area */}
+          {externalStanchionPositions.map((z, i) => (
+            <React.Fragment key={`external-stanchion-pair-${i}`}>
+                <Stanchion position={[1.8, 0, z]} />
+                <Stanchion position={[-1.8, 0, z]} />
+                {i < externalStanchionPositions.length - 1 && (
+                  <>
+                    <VelvetRope start={[1.8, 0, z]} end={[1.8, 0, externalStanchionPositions[i+1]]} />
+                    <VelvetRope start={[-1.8, 0, z]} end={[-1.8, 0, externalStanchionPositions[i+1]]} />
+                  </>
+                )}
+            </React.Fragment>
+          ))}
+          
           <pointLight position={[0, 7, 5]} intensity={2.0} distance={30} color="#ffffff" />
           <group position={[0, 0, 0]}>
              {[...Array(6)].map((_, i) => (
                 <group key={`fan-l-${i}`} position={[-4.5 + Math.random() * -1, 0, 5 + i * 2]}>
-                   <mesh position={[0, 1, 0]}><boxGeometry args={[0.5, 2, 0.5]} /><meshStandardMaterial color={`hsl(${Math.random() * 360}, 30%, 20%)`} /></mesh>
+                   <mesh position={[0, 1, 0]}><boxGeometry args={[0.5, 2, 0.5]} /><meshStandardMaterial color={`hsl(${Math.random() * 360}, 30%, 15%)`} /></mesh>
                    <PaparazziFlash position={[0, 1.8, 0.2]} />
                 </group>
              ))}
              {[...Array(6)].map((_, i) => (
                 <group key={`fan-r-${i}`} position={[4.5 + Math.random() * 1, 0, 5 + i * 2]}>
-                   <mesh position={[0, 1, 0]}><boxGeometry args={[0.5, 2, 0.5]} /><meshStandardMaterial color={`hsl(${Math.random() * 360}, 30%, 20%)`} /></mesh>
+                   <mesh position={[0, 1, 0]}><boxGeometry args={[0.5, 2, 0.5]} /><meshStandardMaterial color={`hsl(${Math.random() * 360}, 30%, 15%)`} /></mesh>
                    <PaparazziFlash position={[0, 1.8, -0.2]} />
                 </group>
              ))}
