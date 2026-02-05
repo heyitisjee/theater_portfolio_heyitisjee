@@ -316,6 +316,45 @@ const VelvetRope: React.FC<{ start: [number, number, number], end: [number, numb
   );
 };
 
+const SteelBarricade: React.FC<{ position: [number, number, number], rotation?: [number, number, number] }> = ({ position, rotation = [0, 0, 0] }) => (
+  <group position={position} rotation={rotation}>
+    {/* Frame */}
+    <mesh position={[0, 1.1, 0]} castShadow>
+      <boxGeometry args={[2.0, 0.06, 0.06]} />
+      <meshStandardMaterial color="#888" metalness={0.8} roughness={0.2} />
+    </mesh>
+    <mesh position={[0, 0.4, 0]} castShadow>
+      <boxGeometry args={[2.0, 0.04, 0.04]} />
+      <meshStandardMaterial color="#888" metalness={0.8} roughness={0.2} />
+    </mesh>
+    {/* Verticals */}
+    {[-0.95, -0.65, -0.35, -0.05, 0.25, 0.55, 0.85].map((x, i) => (
+      <mesh key={i} position={[x, 0.7, 0]} castShadow>
+        <boxGeometry args={[0.03, 0.8, 0.03]} />
+        <meshStandardMaterial color="#888" metalness={0.8} roughness={0.2} />
+      </mesh>
+    ))}
+    {/* End Posts */}
+    <mesh position={[-1, 0.55, 0]} castShadow>
+      <boxGeometry args={[0.07, 1.1, 0.07]} />
+      <meshStandardMaterial color="#777" metalness={0.9} roughness={0.1} />
+    </mesh>
+    <mesh position={[1, 0.55, 0]} castShadow>
+      <boxGeometry args={[0.07, 1.1, 0.07]} />
+      <meshStandardMaterial color="#777" metalness={0.9} roughness={0.1} />
+    </mesh>
+    {/* Feet */}
+    <mesh position={[-1, 0.02, 0]} castShadow>
+      <boxGeometry args={[0.1, 0.04, 0.6]} />
+      <meshStandardMaterial color="#444" metalness={0.6} />
+    </mesh>
+    <mesh position={[1, 0.02, 0]} castShadow>
+      <boxGeometry args={[0.1, 0.04, 0.6]} />
+      <meshStandardMaterial color="#444" metalness={0.6} />
+    </mesh>
+  </group>
+);
+
 const Lobby: React.FC<LobbyProps> = ({ 
   highlightedPoster, 
   auditoriumDoorOpen, 
@@ -361,12 +400,13 @@ const Lobby: React.FC<LobbyProps> = ({
 
   const posterY = 3.0;
 
-  // Reusable wall material for consistent broadway theater look - Uniform across all walls
   const WallMaterial = () => <meshStandardMaterial color="#fdfcf0" roughness={0.35} metalness={0.05} side={DoubleSide} />;
-  const DoorMaterial = () => <meshStandardMaterial color="#1a0401" roughness={0.15} metalness={0.1} />;
+  
+  // Updated DoorMaterial: lower metalness and higher roughness per user request
+  const DoorMaterial = () => <meshStandardMaterial color="#1a0401" roughness={0.8} metalness={0.02} />;
 
   const stanchionPositions = [-7, -5, -3, -1, 1, 3, 5, 7];
-  const externalStanchionPositions = [0, 2, 4, 6, 8, 10, 12, 14];
+  const externalBarricadePositions = [1, 3, 5, 7, 9, 11, 13];
 
   return (
     <group>
@@ -379,13 +419,13 @@ const Lobby: React.FC<LobbyProps> = ({
             <meshStandardMaterial color="#f0f0f0" roughness={0.04} metalness={0.1} />
          </mesh>
 
-         {/* Broadway Red Carpet - Precise fit (0 to 15 world) */}
+         {/* Broadway Red Carpet */}
          <mesh position={[0, 0.015, 0.05]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
             <planeGeometry args={[3.2, 14.9]} />
             <meshStandardMaterial color="#8b0000" roughness={0.8} />
          </mesh>
 
-         {/* Stanchions and Ropes - Lining the lobby length */}
+         {/* Stanchions and Ropes - Internal Lobby */}
          {stanchionPositions.map((z, i) => (
            <React.Fragment key={`stanchion-pair-${i}`}>
               <Stanchion position={[1.8, 0, z]} />
@@ -399,7 +439,7 @@ const Lobby: React.FC<LobbyProps> = ({
            </React.Fragment>
          ))}
 
-         {/* Walls - Uniform Broadway Aesthetic */}
+         {/* Walls */}
          <mesh position={[-lobbyWidth/2, lobbyHeight/2, 0]} rotation={[0, Math.PI/2, 0]}>
             <planeGeometry args={[lobbyDepth, lobbyHeight]} />
             <WallMaterial />
@@ -409,7 +449,7 @@ const Lobby: React.FC<LobbyProps> = ({
             <WallMaterial />
          </mesh>
 
-         {/* Poster Spotlights and Frames */}
+         {/* Posters */}
          <PosterWithLight 
             name="First Filter Poster" 
             position={[-lobbyWidth / 2 + 0.12, posterY, -4.5]} 
@@ -455,13 +495,12 @@ const Lobby: React.FC<LobbyProps> = ({
          />
       </group>
 
-      {/* Main Entrance Wall */}
+      {/* Entrance and Auditorium Walls */}
       <group position={[0, lobbyHeight / 2, 15]}>
           <mesh position={[-5, 0, 0]}><boxGeometry args={[6, lobbyHeight, 0.5]} /><WallMaterial /></mesh>
           <mesh position={[5, 0, 0]}><boxGeometry args={[6, lobbyHeight, 0.5]} /><WallMaterial /></mesh>
           <mesh position={[0, 2, 0]}><boxGeometry args={[4, 4, 0.5]} /><WallMaterial /></mesh>
       </group>
-      {/* Auditorium Entrance Wall */}
       <group position={[0, lobbyHeight / 2, 0]}>
           <mesh position={[-5, 0, 0]}><boxGeometry args={[6, lobbyHeight, 0.5]} /><WallMaterial /></mesh>
           <mesh position={[5, 0, 0]}><boxGeometry args={[6, lobbyHeight, 0.5]} /><WallMaterial /></mesh>
@@ -538,7 +577,7 @@ const Lobby: React.FC<LobbyProps> = ({
         <Usher />
       </Suspense>
 
-      {/* External Area - Stage Door Barricades Restored */}
+      {/* External Area - Stage Door Area with Steel Barricades */}
       <group position={[0, 0, 15]}>
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 7.5]}>
             <planeGeometry args={[20, 15]} />
@@ -549,17 +588,11 @@ const Lobby: React.FC<LobbyProps> = ({
             <meshStandardMaterial color="#700" />
           </mesh>
 
-          {/* Restored Barricades for the External Area */}
-          {externalStanchionPositions.map((z, i) => (
-            <React.Fragment key={`external-stanchion-pair-${i}`}>
-                <Stanchion position={[1.8, 0, z]} />
-                <Stanchion position={[-1.8, 0, z]} />
-                {i < externalStanchionPositions.length - 1 && (
-                  <>
-                    <VelvetRope start={[1.8, 0, z]} end={[1.8, 0, externalStanchionPositions[i+1]]} />
-                    <VelvetRope start={[-1.8, 0, z]} end={[-1.8, 0, externalStanchionPositions[i+1]]} />
-                  </>
-                )}
+          {/* Industrial Steel Barricades for the Stage Door Extension */}
+          {externalBarricadePositions.map((z, i) => (
+            <React.Fragment key={`external-barricade-pair-${i}`}>
+                <SteelBarricade position={[1.85, 0, z]} rotation={[0, Math.PI / 2, 0]} />
+                <SteelBarricade position={[-1.85, 0, z]} rotation={[0, Math.PI / 2, 0]} />
             </React.Fragment>
           ))}
           
