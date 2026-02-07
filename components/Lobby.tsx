@@ -2,7 +2,7 @@
 import React, { useRef, Suspense, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { DoubleSide, Object3D } from 'three';
-import { useGLTF, useAnimations, useTexture } from '@react-three/drei';
+import { useGLTF, useAnimations, useTexture, Text } from '@react-three/drei';
 import * as THREE from 'three';
 
 interface LobbyProps {
@@ -19,6 +19,7 @@ interface LobbyProps {
 }
 
 const USHER_MODEL_URL = 'https://raw.githubusercontent.com/heyitisjee/theater-assets/bd44fe10a9cfa22b5d8935e6b77d2484a0f561dd/talking-v2.glb';
+const CELEB_MODEL_URL = 'https://raw.githubusercontent.com/heyitisjee/theater-assets/efe80f79f15b0759e611c58fb180651ae51ef3fe/walkingceleb-v1.glb';
 
 const Usher: React.FC = () => {
   const groupRef = useRef<THREE.Group>(null);
@@ -114,41 +115,51 @@ const StagePerformer: React.FC<{ index: number }> = ({ index }) => {
   );
 };
 
-const PaparazziFlash: React.FC<{ position: [number, number, number] }> = ({ position }) => {
+const PaparazziFlash: React.FC<{ position: [number, number, number], intensityMultiplier?: number }> = ({ position, intensityMultiplier = 1 }) => {
   const lightRef = useRef<THREE.PointLight>(null);
   const flashIntensity = useRef(0);
 
   useFrame(() => {
     if (!lightRef.current) return;
-    if (Math.random() > 0.99) { 
-      flashIntensity.current = 18;
+    if (Math.random() > 0.97) { 
+      flashIntensity.current = 25 * intensityMultiplier;
     } else {
-      flashIntensity.current *= 0.85;
+      flashIntensity.current *= 0.82;
     }
     lightRef.current.intensity = flashIntensity.current;
   });
 
-  return <pointLight ref={lightRef} position={position} color="#ffffff" distance={8} />;
+  return <pointLight ref={lightRef} position={position} color="#ffffff" distance={12} />;
 };
 
 const Performer: React.FC<{ isSigning: boolean }> = ({ isSigning }) => {
   const groupRef = useRef<THREE.Group>(null);
+  const { scene, animations } = useGLTF(CELEB_MODEL_URL);
+  const { actions } = useAnimations(animations, groupRef);
   const targetZ = 3.0; 
   const startZ = 12.0; 
 
+  useEffect(() => {
+    if (actions && Object.keys(actions).length > 0) {
+      const action = actions[Object.keys(actions)[0]];
+      action?.play();
+    }
+  }, [actions]);
+
   useFrame((state) => {
     if (groupRef.current) {
-      groupRef.current.position.z = THREE.MathUtils.lerp(groupRef.current.position.z, targetZ, 0.015);
+      groupRef.current.position.z = THREE.MathUtils.lerp(groupRef.current.position.z, targetZ, 0.012);
       
       const walkProgress = Math.abs(groupRef.current.position.z - targetZ);
-      if (walkProgress > 0.05) {
-         groupRef.current.position.y = Math.sin(state.clock.elapsedTime * 6) * 0.08 + 1.2;
-      } else {
-         groupRef.current.position.y = THREE.MathUtils.lerp(groupRef.current.position.y, 1.2, 0.1);
+      if (walkProgress < 0.05) {
+         if (actions && Object.keys(actions).length > 0) {
+           const action = actions[Object.keys(actions)[0]];
+           action?.fadeOut(0.5);
+         }
       }
 
       if (isSigning) {
-        groupRef.current.scale.lerp(new THREE.Vector3(1.2, 1.2, 1.2), 0.1);
+        groupRef.current.scale.lerp(new THREE.Vector3(1.1, 1.1, 1.1), 0.1);
       } else {
         groupRef.current.scale.lerp(new THREE.Vector3(1, 1, 1), 0.1);
       }
@@ -156,15 +167,8 @@ const Performer: React.FC<{ isSigning: boolean }> = ({ isSigning }) => {
   });
 
   return (
-    <group ref={groupRef} position={[0, 1.2, startZ]} userData={{ type: 'performer' }}>
-       <mesh castShadow>
-          <boxGeometry args={[0.8, 2.4, 0.5]} />
-          <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={0.5} />
-       </mesh>
-       <mesh position={[0, 1.6, 0.3]}>
-          <boxGeometry args={[0.4, 0.4, 0.2]} />
-          <meshStandardMaterial color="#222" />
-       </mesh>
+    <group ref={groupRef} position={[0, 0, startZ]} userData={{ type: 'performer' }}>
+       <primitive object={scene} scale={[1.4, 1.4, 1.4]} rotation={[0, Math.PI, 0]} />
     </group>
   );
 };
@@ -318,7 +322,6 @@ const VelvetRope: React.FC<{ start: [number, number, number], end: [number, numb
 
 const SteelBarricade: React.FC<{ position: [number, number, number], rotation?: [number, number, number] }> = ({ position, rotation = [0, 0, 0] }) => (
   <group position={position} rotation={rotation}>
-    {/* Frame */}
     <mesh position={[0, 1.1, 0]} castShadow>
       <boxGeometry args={[2.0, 0.06, 0.06]} />
       <meshStandardMaterial color="#888" metalness={0.8} roughness={0.2} />
@@ -327,14 +330,12 @@ const SteelBarricade: React.FC<{ position: [number, number, number], rotation?: 
       <boxGeometry args={[2.0, 0.04, 0.04]} />
       <meshStandardMaterial color="#888" metalness={0.8} roughness={0.2} />
     </mesh>
-    {/* Verticals */}
     {[-0.95, -0.65, -0.35, -0.05, 0.25, 0.55, 0.85].map((x, i) => (
       <mesh key={i} position={[x, 0.7, 0]} castShadow>
         <boxGeometry args={[0.03, 0.8, 0.03]} />
         <meshStandardMaterial color="#888" metalness={0.8} roughness={0.2} />
       </mesh>
     ))}
-    {/* End Posts */}
     <mesh position={[-1, 0.55, 0]} castShadow>
       <boxGeometry args={[0.07, 1.1, 0.07]} />
       <meshStandardMaterial color="#777" metalness={0.9} roughness={0.1} />
@@ -343,7 +344,6 @@ const SteelBarricade: React.FC<{ position: [number, number, number], rotation?: 
       <boxGeometry args={[0.07, 1.1, 0.07]} />
       <meshStandardMaterial color="#777" metalness={0.9} roughness={0.1} />
     </mesh>
-    {/* Feet */}
     <mesh position={[-1, 0.02, 0]} castShadow>
       <boxGeometry args={[0.1, 0.04, 0.6]} />
       <meshStandardMaterial color="#444" metalness={0.6} />
@@ -352,6 +352,29 @@ const SteelBarricade: React.FC<{ position: [number, number, number], rotation?: 
       <boxGeometry args={[0.1, 0.04, 0.6]} />
       <meshStandardMaterial color="#444" metalness={0.6} />
     </mesh>
+  </group>
+);
+
+const DoorLabel: React.FC<{ text: string, position: [number, number, number] }> = ({ text, position }) => (
+  <group position={position}>
+    <mesh position={[0, 0, -0.05]}>
+      <boxGeometry args={[5, 1.2, 0.1]} />
+      <meshStandardMaterial color="#050505" />
+    </mesh>
+    <mesh position={[0, 0, -0.06]}>
+      <boxGeometry args={[5.2, 1.4, 0.05]} />
+      <meshStandardMaterial color="#ffd700" metalness={1} roughness={0.1} />
+    </mesh>
+    <Text
+      position={[0, 0, 0.06]}
+      fontSize={0.45}
+      color="#ffd700"
+      anchorX="center"
+      anchorY="middle"
+      letterSpacing={0.1}
+    >
+      {text}
+    </Text>
   </group>
 );
 
@@ -401,9 +424,6 @@ const Lobby: React.FC<LobbyProps> = ({
   const posterY = 3.0;
 
   const WallMaterial = () => <meshStandardMaterial color="#fdfcf0" roughness={0.35} metalness={0.05} side={DoubleSide} />;
-  
-  // Updated DoorMaterial: lower metalness and higher roughness per user request
-  const DoorMaterial = () => <meshStandardMaterial color="#1a0401" roughness={0.8} metalness={0.02} />;
 
   const stanchionPositions = [-7, -5, -3, -1, 1, 3, 5, 7];
   const externalBarricadePositions = [1, 3, 5, 7, 9, 11, 13];
@@ -413,19 +433,16 @@ const Lobby: React.FC<LobbyProps> = ({
       <hemisphereLight intensity={0.65} groundColor="#111" color="#ffffff" />
       
       <group position={[0, 0, lobbyDepth / 2]}>
-         {/* Lobby Floor */}
          <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
             <planeGeometry args={[lobbyWidth, lobbyDepth]} />
             <meshStandardMaterial color="#f0f0f0" roughness={0.04} metalness={0.1} />
          </mesh>
 
-         {/* Broadway Red Carpet */}
          <mesh position={[0, 0.015, 0.05]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
             <planeGeometry args={[3.2, 14.9]} />
             <meshStandardMaterial color="#8b0000" roughness={0.8} />
          </mesh>
 
-         {/* Stanchions and Ropes - Internal Lobby */}
          {stanchionPositions.map((z, i) => (
            <React.Fragment key={`stanchion-pair-${i}`}>
               <Stanchion position={[1.8, 0, z]} />
@@ -439,7 +456,6 @@ const Lobby: React.FC<LobbyProps> = ({
            </React.Fragment>
          ))}
 
-         {/* Walls */}
          <mesh position={[-lobbyWidth/2, lobbyHeight/2, 0]} rotation={[0, Math.PI/2, 0]}>
             <planeGeometry args={[lobbyDepth, lobbyHeight]} />
             <WallMaterial />
@@ -449,7 +465,6 @@ const Lobby: React.FC<LobbyProps> = ({
             <WallMaterial />
          </mesh>
 
-         {/* Posters */}
          <PosterWithLight 
             name="First Filter Poster" 
             position={[-lobbyWidth / 2 + 0.12, posterY, -4.5]} 
@@ -495,16 +510,17 @@ const Lobby: React.FC<LobbyProps> = ({
          />
       </group>
 
-      {/* Entrance and Auditorium Walls */}
       <group position={[0, lobbyHeight / 2, 15]}>
           <mesh position={[-5, 0, 0]}><boxGeometry args={[6, lobbyHeight, 0.5]} /><WallMaterial /></mesh>
           <mesh position={[5, 0, 0]}><boxGeometry args={[6, lobbyHeight, 0.5]} /><WallMaterial /></mesh>
           <mesh position={[0, 2, 0]}><boxGeometry args={[4, 4, 0.5]} /><WallMaterial /></mesh>
+          <DoorLabel text="STAGE DOOR" position={[0, 1.8, 0.3]} />
       </group>
       <group position={[0, lobbyHeight / 2, 0]}>
           <mesh position={[-5, 0, 0]}><boxGeometry args={[6, lobbyHeight, 0.5]} /><WallMaterial /></mesh>
           <mesh position={[5, 0, 0]}><boxGeometry args={[6, lobbyHeight, 0.5]} /><WallMaterial /></mesh>
           <mesh position={[0, 2, 0]}><boxGeometry args={[4, 4, 0.5]} /><WallMaterial /></mesh>
+          <DoorLabel text="AUDITORIUM" position={[0, 1.8, 0.3]} />
       </group>
 
       <mesh position={[0, lobbyHeight, lobbyDepth/2]} rotation={[Math.PI/2, 0, 0]}>
@@ -512,26 +528,24 @@ const Lobby: React.FC<LobbyProps> = ({
          <meshStandardMaterial color="#ffffff" />
       </mesh>
 
-      {/* Doors */}
       <group position={[2, 0, 0]} ref={rightAudDoorRef}>
-        <mesh position={[-1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><DoorMaterial /></mesh>
+        <mesh position={[-1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><meshStandardMaterial color="#1a0401" roughness={0.8} metalness={0.02} /></mesh>
         <mesh position={[-1.8, 2, 0.12]}><sphereGeometry args={[0.08, 16, 16]} /><meshStandardMaterial color="#ffd700" metalness={1} /></mesh>
       </group>
       <group position={[-2, 0, 0]} ref={leftAudDoorRef}>
-        <mesh position={[1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><DoorMaterial /></mesh>
+        <mesh position={[1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><meshStandardMaterial color="#1a0401" roughness={0.8} metalness={0.02} /></mesh>
         <mesh position={[1.8, 2, 0.12]}><sphereGeometry args={[0.08, 16, 16]} /><meshStandardMaterial color="#ffd700" metalness={1} /></mesh>
       </group>
 
       <group position={[2, 0, 15]} ref={rightLobbyDoorRef}>
-        <mesh position={[-1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><DoorMaterial /></mesh>
+        <mesh position={[-1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><meshStandardMaterial color="#1a0401" roughness={0.8} metalness={0.02} /></mesh>
         <mesh position={[-1.8, 2, -0.12]}><sphereGeometry args={[0.08, 16, 16]} /><meshStandardMaterial color="#ffd700" metalness={1} /></mesh>
       </group>
       <group position={[-2, 0, 15]} ref={leftLobbyDoorRef}>
-        <mesh position={[1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><DoorMaterial /></mesh>
+        <mesh position={[1.05, 2, 0]}><boxGeometry args={[2.1, 4, 0.2]} /><meshStandardMaterial color="#1a0401" roughness={0.8} metalness={0.02} /></mesh>
         <mesh position={[1.8, 2, -0.12]}><sphereGeometry args={[0.08, 16, 16]} /><meshStandardMaterial color="#ffd700" metalness={1} /></mesh>
       </group>
 
-      {/* Auditorium Area */}
       <group position={[0, 0, -12.5]}>
          <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
             <planeGeometry args={[lobbyWidth, 25]} />
@@ -577,7 +591,6 @@ const Lobby: React.FC<LobbyProps> = ({
         <Usher />
       </Suspense>
 
-      {/* External Area - Stage Door Area with Steel Barricades */}
       <group position={[0, 0, 15]}>
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 7.5]}>
             <planeGeometry args={[20, 15]} />
@@ -588,7 +601,6 @@ const Lobby: React.FC<LobbyProps> = ({
             <meshStandardMaterial color="#700" />
           </mesh>
 
-          {/* Industrial Steel Barricades for the Stage Door Extension */}
           {externalBarricadePositions.map((z, i) => (
             <React.Fragment key={`external-barricade-pair-${i}`}>
                 <SteelBarricade position={[1.85, 0, z]} rotation={[0, Math.PI / 2, 0]} />
@@ -596,18 +608,20 @@ const Lobby: React.FC<LobbyProps> = ({
             </React.Fragment>
           ))}
           
-          <pointLight position={[0, 7, 5]} intensity={2.0} distance={30} color="#ffffff" />
+          <pointLight position={[0, 7, 5]} intensity={6.0} distance={40} color="#ffffff" />
+          <ambientLight intensity={0.4} />
+
           <group position={[0, 0, 0]}>
              {[...Array(6)].map((_, i) => (
                 <group key={`fan-l-${i}`} position={[-4.5 + Math.random() * -1, 0, 5 + i * 2]}>
                    <mesh position={[0, 1, 0]}><boxGeometry args={[0.5, 2, 0.5]} /><meshStandardMaterial color={`hsl(${Math.random() * 360}, 30%, 15%)`} /></mesh>
-                   <PaparazziFlash position={[0, 1.8, 0.2]} />
+                   <PaparazziFlash position={[0, 1.8, 0.2]} intensityMultiplier={performerArrived ? 1.5 : 1} />
                 </group>
              ))}
              {[...Array(6)].map((_, i) => (
                 <group key={`fan-r-${i}`} position={[4.5 + Math.random() * 1, 0, 5 + i * 2]}>
                    <mesh position={[0, 1, 0]}><boxGeometry args={[0.5, 2, 0.5]} /><meshStandardMaterial color={`hsl(${Math.random() * 360}, 30%, 15%)`} /></mesh>
-                   <PaparazziFlash position={[0, 1.8, -0.2]} />
+                   <PaparazziFlash position={[0, 1.8, -0.2]} intensityMultiplier={performerArrived ? 1.5 : 1} />
                 </group>
              ))}
           </group>

@@ -18,6 +18,12 @@ const PROGRAM_PAGES = [
 
 const SIGNED_PROGRAM_FIRST_PAGE = "https://raw.githubusercontent.com/heyitisjee/theater-assets/4d5f2760862aafd7a1401227e94afb0f8e6562cb/Hyeji%20Kim%20portfolio%202026.png";
 
+const SOUNDTRACKS = [
+  "https://raw.githubusercontent.com/heyitisjee/theater-assets/72545251b5f393d7c81fbaac3e09def7880d7639/Charlotte's%20Web%20(1973)%20Sountrack%20-%20Chin%20Up%20-%20CineTracks.mp3",
+  "https://raw.githubusercontent.com/heyitisjee/theater-assets/72545251b5f393d7c81fbaac3e09def7880d7639/Little%20Girls%20(From%20the%20Annie%20(2014)%20Original%20Movie%20Soundtrack)%20-%20Cameron%20Diaz.mp3",
+  "https://raw.githubusercontent.com/heyitisjee/theater-assets/72545251b5f393d7c81fbaac3e09def7880d7639/No%20More%20-%20Chip%20Zien.mp3"
+];
+
 const PAGE_BORDER_COLOR = "#000000";
 
 const App: React.FC = () => {
@@ -30,6 +36,7 @@ const App: React.FC = () => {
   const hintTimeoutRef = useRef<number | null>(null);
   const lastInteractionKeyRef = useRef<string | null>(null);
   const playerPositionRef = useRef({ x: 0, y: 0, z: 0 });
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Game State
   const [hasStarted, setHasStarted] = useState(false);
@@ -112,6 +119,38 @@ const App: React.FC = () => {
   const isHoldingOperaGlass = activeItem === 'OPERA_GLASS';
   const isHoldingBook = activeItem === 'BOOK' || activeItem === 'SIGNED_BOOK';
   const currentTargetFov = (isHoldingOperaGlass && isZooming) ? 30 : 75;
+
+  // Soundtrack Logic - Original Requirement
+  useEffect(() => {
+    const isPlayerInAuditorium = playerPositionRef.current.z <= 0.5;
+    const shouldPlay = isPlayerInAuditorium && isSitting && hasStarted;
+
+    if (shouldPlay) {
+      const trackUrl = SOUNDTRACKS[stagePerformerIndex] || SOUNDTRACKS[0];
+      if (!audioRef.current) {
+        audioRef.current = new Audio(trackUrl);
+        audioRef.current.loop = true;
+        audioRef.current.volume = 0.5;
+        audioRef.current.play().catch(e => console.warn("Audio blocked:", e));
+      } else if (audioRef.current.src !== trackUrl) {
+        audioRef.current.pause();
+        audioRef.current.src = trackUrl;
+        audioRef.current.play().catch(e => console.warn("Audio blocked:", e));
+      }
+    } else {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    }
+
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, [isSitting, stagePerformerIndex, hasStarted]);
 
   // Multi-layered Escape handling
   useEffect(() => {
@@ -239,9 +278,13 @@ const App: React.FC = () => {
         setVideoOpacity(0);
         video.src = targetSrc;
         video.load();
+        video.muted = false; // Enable sound
         video.play().catch(() => setIsVideoLoading(false));
       } else {
-        if (video.paused) video.play();
+        if (video.paused) {
+          video.muted = false; // Enable sound
+          video.play();
+        }
         setVideoOpacity(1);
       }
     } else {
@@ -321,7 +364,7 @@ const App: React.FC = () => {
     triggerHotbar();
     setAuditoriumDoorOpen(true);
     showDialogue("Usher: Here is your program. Enjoy the show!");
-  }, [triggerHotbar, showDialogue]);
+  }, [triggerHotbar, showDialogue, auditoriumDoorOpen]);
 
   const receiveAutograph = useCallback(() => {
      const bookIndex = hotbar.indexOf('BOOK');
@@ -632,14 +675,16 @@ const App: React.FC = () => {
 
       {!hasStarted && (
         <div className="absolute inset-0 flex items-center justify-center z-[200] bg-zinc-950">
-          <div className="text-center p-6 sm:p-12 max-w-lg animate-in fade-in duration-700">
-            <h1 className="text-5xl sm:text-7xl font-black mb-4 text-white tracking-tighter uppercase">THEATER</h1>
+          <div className="text-center p-6 sm:p-12 max-w-2xl animate-in fade-in duration-700">
+            <h1 className="text-5xl sm:text-7xl font-black mb-4 text-white tracking-tighter uppercase">Hyeji Kim Portfolio</h1>
             <div className="w-24 h-1 bg-white mx-auto mb-8"></div>
-            <p className="text-zinc-500 mb-10 text-[10px] uppercase tracking-[0.3em] leading-loose">White Lobby | Black Auditorium</p>
-            <div className="flex flex-col gap-4">
-              <button className="px-12 py-5 bg-white text-black font-black hover:scale-105 transition-transform uppercase tracking-[0.2em] text-[10px] shadow-2xl" 
+            <p className="text-zinc-500 mb-10 text-[10px] uppercase tracking-[0.3em] leading-loose">
+              WASD to move around, use phone to take pictures and scan posters, enjoy the show and be happy!
+            </p>
+            <div className="flex flex-col gap-4 items-center">
+              <button className="px-12 py-5 bg-white text-black font-black hover:scale-105 transition-transform uppercase tracking-[0.2em] text-[10px] shadow-2xl w-full sm:w-auto" 
                       onClick={() => { setHasStarted(true); if (!isTouchDevice) { setTimeout(() => controlsRef.current?.lock(), 100); } else setIsLocked(true); }}>Enter Experience</button>
-              <button className="px-12 py-3 bg-zinc-800 text-white font-black hover:bg-zinc-700 transition-colors uppercase tracking-[0.2em] text-[10px]" 
+              <button className="px-12 py-3 bg-zinc-800 text-white font-black hover:bg-zinc-700 transition-colors uppercase tracking-[0.2em] text-[10px] w-full sm:w-auto" 
                       onClick={toggleFullscreen}><Maximize size={14} className="inline mr-2" /> Full Screen</button>
             </div>
           </div>
@@ -717,7 +762,6 @@ const App: React.FC = () => {
                               className="max-w-full max-h-full object-contain transition-opacity duration-500 shadow-2xl rounded-lg" 
                               style={{ opacity: videoOpacity }} 
                               loop 
-                              muted 
                               playsInline 
                               onPlaying={() => { setIsVideoLoading(false); setVideoOpacity(1); }} 
                            />
