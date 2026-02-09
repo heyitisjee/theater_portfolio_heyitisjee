@@ -572,36 +572,22 @@ const App: React.FC = () => {
       <video ref={webcamRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover z-0 opacity-100 pointer-events-none" />
 
       <div className={`transition-opacity duration-700 w-full h-full z-10 relative`}>
-        <Canvas shadows camera={{ fov: 75, position: [0, 2.5, 5] }} gl={{ preserveDrawingBuffer: true, alpha: true, antialias: true }}>
-          <TheaterScene 
-            onTargetChange={setTargetedPoster} 
-            onChairTargetChange={setTargetChair}
-            onAuditoriumDoorDistanceChange={setNearAuditoriumDoor}
-            onLobbyDoorDistanceChange={setNearLobbyDoor}
-            onUsherHover={setIsHoveringUsher}
-            onStageDoorApproach={setNearStageDoor}
-            onPerformerHover={setIsHoveringPerformer}
-            onAuditoriumEntry={handleAuditoriumEntry}
-            onAuditoriumExit={handleAuditoriumExit}
-            onPositionUpdate={(pos) => { playerPositionRef.current = pos; }}
-            highlightedPoster={targetedPoster} 
-            auditoriumDoorOpen={auditoriumDoorOpen}
-            lobbyDoorOpen={lobbyDoorOpen}
-            isSitting={isSitting}
-            sittingChairId={sittingChair}
-            isCameraActive={cameraMode}
-            performerArrived={performerArrived}
-            stagePerformerIndex={stagePerformerIndex}
-            isPerformerSigning={isPerformerSigning}
-            fov={currentTargetFov}
-            isVisible={true}
-            joystickInput={joystickPos}
-            isTouchDevice={isTouchDevice}
-          />
-          {!isTouchDevice && <PointerLockControls ref={controlsRef} onLock={() => setIsLocked(true)} onUnlock={() => setIsLocked(false)} />}
+        <Canvas 
+          dpr={[1, 2]} // Prevents lag on high-resolution screens
+          frameloop="demand" // Only renders when needed, stops the "fan noise"
+          shadows={{ 
+            type: 1, // Uses BasicShadowMap for better performance
+            enabled: true 
+          }}
+          camera={{ position: [0, 5, 10], fov: 45 }}
+        >
+          <Suspense fallback={null}>
+             <TheaterModel />
+             <Preload all /> {/* Forces assets to load before the scene starts */}
+          </Suspense>
+          <Stats /> {/* Remove this line once you're happy with the speed! */}
         </Canvas>
       </div>
-
       <div className={`absolute inset-0 bg-white pointer-events-none z-[100] transition-opacity duration-150 ${flash ? 'opacity-100' : 'opacity-0'}`} />
 
       {hasStarted && !isLocked && !isReading && !galleryOpen && !cameraMode && !isTouchDevice && (
