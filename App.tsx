@@ -1,6 +1,8 @@
-
+import React, { Suspense } from 'react';
+import * as THREE from 'three';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
+import { Preload, Stats } from '@react-three/drei';
 import { PointerLockControls } from '@react-three/drei';
 import TheaterScene from './components/TheaterScene';
 import { Camera, Image as ImageIcon, Scan, Maximize, Zap, X, BookOpen, Star, Loader2, Binoculars, MousePointer2, ChevronRight, ChevronLeft, Trash2 } from 'lucide-react';
