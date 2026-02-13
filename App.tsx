@@ -37,10 +37,10 @@ const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
   const [joystickInput, setJoystickInput] = useState({ x: 0, y: 0 });
-  const [mobileZoom, setMobileZoom] = useState(0.5); // 0 to 1 for opera glass zoom
+  const [mobileZoom, setMobileZoom] = useState(0); // 0 to 1 for opera glass zoom
   
   const [hotbar, setHotbar] = useState<ItemType[]>(['EMPTY', 'OPERA_GLASS', 'TICKET', null, null]);
-  const [activeSlot, setActiveSlot] = useState<number>(2); 
+  const [activeSlot, setActiveSlot] = useState<number>(2); // Start with Ticket selected
   const [showHotbar, setShowHotbar] = useState(false);
   const [cameraMode, setCameraMode] = useState(false);
   const [inventory, setInventory] = useState<string[]>([]);
@@ -110,7 +110,7 @@ const App: React.FC = () => {
 
   const isInspectable = equippedItem === 'BOOK' || equippedItem === 'SIGNED_BOOK' || equippedItem === 'TICKET';
   
-  // Mobile zoom calculation
+  // Dynamic FOV based on zoom (opera glass)
   const currentTargetFov = (equippedItem === 'OPERA_GLASS') 
     ? (isMobile ? (75 - (mobileZoom * 50)) : (isZooming ? 30 : 75))
     : 75;
@@ -170,8 +170,8 @@ const App: React.FC = () => {
      }
   }, [hasProgram, hotbar]);
 
-  // Handle Mobile "Clicks" (taps) on interactables
-  const handleInteraction = useCallback(() => {
+  // Mobile interaction trigger
+  const handleInteractionTrigger = useCallback(() => {
     if (isHoveringUsher) {
       if (hotbar.includes('TICKET')) receiveBook();
       else setAuditoriumDoorOpen(true);
@@ -256,7 +256,7 @@ const App: React.FC = () => {
     }
   }, [activeDialogue, isReading, isSitting, targetChair, isHoveringUsher, isHoveringPerformer, performerArrived, cameraMode, isInAuditorium, hotbar, isMobile]);
 
-  // Joystick handlers
+  // Joystick Input
   const handleJoystickMove = (e: React.TouchEvent) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
@@ -264,13 +264,10 @@ const App: React.FC = () => {
     const touch = e.touches[0];
     const dx = touch.clientX - centerX;
     const dy = touch.clientY - centerY;
-    const dist = Math.sqrt(dx * dx + dy * dy);
     const maxDist = rect.width / 2;
-    const normalizedX = (dx / maxDist);
-    const normalizedY = (dy / maxDist);
     setJoystickInput({
-      x: Math.max(-1, Math.min(1, normalizedX)),
-      y: Math.max(-1, Math.min(1, normalizedY))
+      x: Math.max(-1, Math.min(1, dx / maxDist)),
+      y: Math.max(-1, Math.min(1, dy / maxDist))
     });
   };
 
@@ -286,7 +283,7 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Shortcuts Overlay - PC/Tablet only */}
+      {/* Persistence Shortcuts Overlay - PC Only */}
       {hasStarted && !isReading && !isMobile && (
         <div className="absolute bottom-10 left-10 z-[150] pointer-events-none flex flex-col gap-1 text-white/50 font-black uppercase tracking-[0.2em] text-[9px] drop-shadow-lg text-left">
           <p>WASD to move</p>
@@ -367,28 +364,37 @@ const App: React.FC = () => {
         </Canvas>
       </div>
 
-      {/* Mobile Interaction Area - Right Side */}
-      {isMobile && hasStarted && !isReading && !cameraMode && !galleryOpen && (
-        <div className="absolute inset-0 z-[100] flex pointer-events-none">
-           <div className="flex-1" /> {/* Left side for joystick */}
-           <div 
-            className="flex-1 pointer-events-auto touch-none" 
-            onTouchStart={(e) => {
-              // Only trigger if not tapping a UI button
-              if ((e.target as HTMLElement).tagName === 'DIV') {
-                // handle interaction on tap
-              }
-            }}
-           />
+      {/* Start Screen */}
+      {!hasStarted && (
+        <div className="absolute inset-0 flex items-center justify-center z-[200] bg-zinc-950 text-white p-8">
+          <div className="text-center max-w-5xl flex flex-col items-center">
+            <h1 className="text-5xl sm:text-7xl font-black uppercase tracking-tighter leading-tight mb-4">Hyeji Kim Portfolio</h1>
+            <p className="text-white/60 mb-16 text-[14px] font-normal uppercase tracking-[0.5em] leading-relaxed max-w-2xl mx-auto">
+              show starting in 5.....4....3...2..1!
+            </p>
+            <button className="px-10 py-3 bg-white text-black font-black hover:scale-105 transition-transform uppercase tracking-[0.3em] text-[11px] shadow-[0_0_80px_rgba(255,255,255,0.2)]" onClick={() => setHasStarted(true)}>Enter Experience</button>
+          </div>
         </div>
       )}
 
-      {/* Mobile Joystick & Controls */}
+      {/* Interaction Prompts */}
+      {interactionText && !isReading && !cameraMode && !galleryOpen && (
+        <div className={`absolute left-1/2 -translate-x-1/2 z-[150] pointer-events-none transition-all duration-500 top-[22%] scale-100`}>
+          <div 
+            onClick={isMobile ? handleInteractionTrigger : undefined}
+            className={`bg-white/95 px-10 py-3 rounded-full text-black text-[12px] font-black uppercase tracking-[0.2em] shadow-2xl border border-black/10 animate-pulse ${isMobile ? 'pointer-events-auto cursor-pointer active:scale-90' : ''}`}
+          >
+            {interactionText}
+          </div>
+        </div>
+      )}
+
+      {/* Mobile-Specific UI */}
       {isMobile && hasStarted && !isReading && !cameraMode && !galleryOpen && (
         <div className="absolute inset-0 z-[110] pointer-events-none">
           {/* Movement Joystick */}
           <div 
-            className="absolute bottom-12 left-12 w-32 h-32 bg-white/5 border-2 border-white/20 rounded-full flex items-center justify-center pointer-events-auto touch-none"
+            className="absolute bottom-16 left-12 w-32 h-32 bg-white/5 border-2 border-white/20 rounded-full flex items-center justify-center pointer-events-auto touch-none"
             onTouchMove={handleJoystickMove}
             onTouchEnd={handleJoystickEnd}
           >
@@ -398,20 +404,7 @@ const App: React.FC = () => {
             />
           </div>
 
-          {/* Interaction Button */}
-          {interactionText && (
-            <div className="absolute bottom-36 right-12 pointer-events-auto">
-              <button 
-                onClick={handleInteraction}
-                className="w-20 h-20 bg-white text-black rounded-full flex flex-col items-center justify-center font-black uppercase text-[10px] shadow-2xl active:scale-90 transition-transform"
-              >
-                <Hand size={24} className="mb-1" />
-                {interactionText.split(' ')[0]}
-              </button>
-            </div>
-          )}
-
-          {/* Mobile UI: Camera & Gallery Buttons */}
+          {/* Camera/Gallery Icons */}
           <div className="absolute top-10 right-10 flex flex-col gap-4 pointer-events-auto">
             <button 
               onClick={() => { setCameraMode(true); setGalleryOpen(false); }}
@@ -427,7 +420,7 @@ const App: React.FC = () => {
             </button>
           </div>
 
-          {/* Opera Glass Zoom Bar */}
+          {/* Opera Glass Zoom slider */}
           {equippedItem === 'OPERA_GLASS' && (
              <div className="absolute right-10 top-1/2 -translate-y-1/2 flex flex-col items-center gap-4 pointer-events-auto">
                 <ZoomIn size={18} className="text-white/50" />
@@ -451,27 +444,7 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {!hasStarted && (
-        <div className="absolute inset-0 flex items-center justify-center z-[200] bg-zinc-950 text-white p-8">
-          <div className="text-center max-w-5xl flex flex-col items-center">
-            <h1 className="text-5xl sm:text-7xl font-black uppercase tracking-tighter leading-tight mb-4">Hyeji Kim Portfolio</h1>
-            <p className="text-white/60 mb-16 text-[14px] font-normal uppercase tracking-[0.5em] leading-relaxed max-w-2xl mx-auto">
-              show starting in 5.....4....3...2..1!
-            </p>
-            <button className="px-10 py-3 bg-white text-black font-black hover:scale-105 transition-transform uppercase tracking-[0.3em] text-[11px] shadow-[0_0_80px_rgba(255,255,255,0.2)]" onClick={() => setHasStarted(true)}>Enter Experience</button>
-          </div>
-        </div>
-      )}
-
-      {/* PC/Tablet Interaction Tooltip */}
-      {interactionText && !isReading && !cameraMode && !galleryOpen && !isMobile && (
-        <div className={`absolute left-1/2 -translate-x-1/2 z-[150] pointer-events-none transition-all duration-500 top-[22%] scale-100`}>
-          <div className="bg-white/95 px-10 py-3 rounded-full text-black text-[12px] font-black uppercase tracking-[0.2em] shadow-2xl border border-black/10 animate-pulse">
-            {interactionText}
-          </div>
-        </div>
-      )}
-
+      {/* Inspect View */}
       {isReading && (
         <div className="absolute inset-0 z-[120] flex items-center justify-center bg-black/98 backdrop-blur-3xl p-12 animate-in fade-in duration-500">
            {equippedItem === 'TICKET' ? (
@@ -489,40 +462,49 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {/* Flash Effect */}
       <div className={`fixed inset-0 bg-white pointer-events-none z-[1000] transition-opacity duration-150 ${flash || celebFlash ? 'opacity-30' : 'opacity-0'}`} />
 
-      {/* Inventory Hotbar - Mobile is persistent */}
-      {hasStarted && !isReading && !cameraMode && !galleryOpen && (
-        <div className={`absolute bottom-10 left-1/2 -translate-x-1/2 z-50 flex gap-4 p-4 bg-black/85 backdrop-blur-3xl rounded-[2.5rem] border border-white/10 shadow-[0_40px_80px_-15px_rgba(0,0,0,0.8)] flex-nowrap min-w-max transition-all duration-700 ${showHotbar ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
+      {/* Inventory Hotbar - Persistent on Mobile */}
+      {hasStarted && !isReading && !galleryOpen && (
+        <div className={`absolute bottom-10 left-1/2 -translate-x-1/2 z-50 flex gap-4 p-4 bg-black/85 backdrop-blur-3xl rounded-[2.5rem] border border-white/10 shadow-[0_40px_80px_-15px_rgba(0,0,0,0.8)] flex-nowrap min-w-max transition-all duration-700 ${(!cameraMode && (showHotbar || isMobile)) ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
           {hotbar.map((item, index) => (
             <div 
               key={index} 
               onClick={() => {
                 setActiveSlot(index);
-                if (item && item !== 'EMPTY' && isMobile) {
-                  // If tapping an interactable item on mobile, maybe auto-inspect? 
-                  // For now just selecting is fine
+                if (isMobile && item && item !== 'EMPTY' && item !== 'OPERA_GLASS') {
+                  // Double tap or select and inspect for mobile
+                  if (activeSlot === index) setIsReading(true);
                 }
               }} 
               className={`w-14 h-14 sm:w-16 sm:h-16 bg-zinc-900/70 border-2 rounded-[1.2rem] sm:rounded-[1.5rem] flex items-center justify-center ${activeSlot === index ? 'border-white scale-110 shadow-[0_0_40px_rgba(255,255,255,0.3)]' : 'border-white/5 hover:border-white/20'} transition-all duration-300 cursor-pointer relative group flex-shrink-0`}
             >
-              {item === 'OPERA_GLASS' && <Binoculars size={28} className="text-white transition-transform group-hover:scale-110" />}
-              {item === 'BOOK' && <BookOpen size={28} className="text-white transition-transform group-hover:scale-110" />}
-              {item === 'SIGNED_BOOK' && <div className="relative group-hover:scale-110 transition-transform"><BookOpen size={28} className="text-yellow-400" /><Star size={12} className="absolute -top-1 -right-1 text-yellow-400 fill-current" /></div>}
-              {item === 'TICKET' && <Ticket size={28} className="text-white transition-transform group-hover:scale-110" />}
+              {item === 'OPERA_GLASS' && <Binoculars size={28} className="text-white" />}
+              {item === 'BOOK' && <BookOpen size={28} className="text-white" />}
+              {item === 'SIGNED_BOOK' && <div className="relative"><BookOpen size={28} className="text-yellow-400" /><Star size={12} className="absolute -top-1 -right-1 text-yellow-400 fill-current" /></div>}
+              {item === 'TICKET' && <Ticket size={28} className="text-white" />}
               <div className="absolute -bottom-2 -right-2 w-6 h-6 sm:w-7 sm:h-7 bg-white text-black text-[9px] sm:text-[10px] rounded-full flex items-center justify-center font-black shadow-2xl">{index + 1}</div>
-              
-              {/* Mobile Quick Inspect for certain items */}
-              {isMobile && activeSlot === index && item && item !== 'EMPTY' && item !== 'OPERA_GLASS' && (
-                <div 
-                  className="absolute -top-14 left-1/2 -translate-x-1/2 bg-white px-3 py-1.5 rounded-full text-black text-[9px] font-black uppercase tracking-widest shadow-2xl animate-in fade-in slide-in-from-bottom-2"
-                  onClick={(e) => { e.stopPropagation(); setIsReading(true); }}
-                >
-                  Inspect
-                </div>
-              )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Mobile Camera Capture Circle */}
+      {isMobile && cameraMode && !isReading && (
+        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-[200] pointer-events-auto">
+           <button 
+             onClick={() => takePhoto()}
+             className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center active:scale-90 transition-transform shadow-2xl"
+           >
+             <div className="w-16 h-16 bg-white rounded-full" />
+           </button>
+           <button 
+             onClick={() => setCameraMode(false)}
+             className="absolute -right-16 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/10 backdrop-blur-xl rounded-full flex items-center justify-center text-white active:scale-90 transition-transform"
+           >
+             <X size={24} />
+           </button>
         </div>
       )}
     </div>

@@ -409,16 +409,16 @@ const Player: React.FC<PlayerProps> = ({
   const PLAYER_HEIGHT = 2.1;
   const SPEED = 4.5;
 
-  // Touch look state
-  const touchStartPos = useRef<{ x: number, y: number } | null>(null);
+  // Touch look rotation state
   const lookRotation = useRef(new Euler(0, 0, 0, 'YXZ'));
+  const touchStartPos = useRef<{ x: number, y: number } | null>(null);
 
   useEffect(() => {
     if (!isTouchDevice) return;
 
     const handleTouchStart = (e: TouchEvent) => {
       const touch = e.touches[0];
-      // Only capture touch for look on the right half of the screen
+      // Only capture touch for looking on the right half of screen
       if (touch.clientX > window.innerWidth / 2) {
         touchStartPos.current = { x: touch.clientX, y: touch.clientY };
       }
@@ -433,10 +433,9 @@ const Player: React.FC<PlayerProps> = ({
       const sensitivity = 0.005;
       lookRotation.current.y -= dx * sensitivity;
       lookRotation.current.x -= dy * sensitivity;
-      lookRotation.current.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, lookRotation.current.x));
+      lookRotation.current.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, lookRotation.current.x));
       
       camera.quaternion.setFromEuler(lookRotation.current);
-      
       touchStartPos.current = { x: touch.clientX, y: touch.clientY };
     };
 
@@ -447,6 +446,7 @@ const Player: React.FC<PlayerProps> = ({
     gl.domElement.addEventListener('touchstart', handleTouchStart);
     gl.domElement.addEventListener('touchmove', handleTouchMove);
     gl.domElement.addEventListener('touchend', handleTouchEnd);
+    
     return () => {
       gl.domElement.removeEventListener('touchstart', handleTouchStart);
       gl.domElement.removeEventListener('touchmove', handleTouchMove);
@@ -472,32 +472,30 @@ const Player: React.FC<PlayerProps> = ({
 
     if (isTouchDevice && joystickInput) {
       mX = joystickInput.x;
-      mZ = joystickInput.y;
+      mZ = -joystickInput.y; // Joystick Y is inverted for forward/backward
     } else {
-      mX = Number(moveState.left) - Number(moveState.right);
-      mZ = Number(moveState.backward) - Number(moveState.forward);
+      mX = Number(moveState.right) - Number(moveState.left);
+      mZ = Number(moveState.forward) - Number(moveState.backward);
     }
     
     const currentlyMoving = mX !== 0 || mZ !== 0;
     if (currentlyMoving !== isMoving) setIsMoving(currentlyMoving);
 
-    if (isTouchDevice && joystickInput) {
-      // For joystick, we use normalized inputs directly
-      direction.current.set(mX, 0, mZ).multiplyScalar(SPEED).applyEuler(new Euler(0, lookRotation.current.y, 0));
-    } else {
-      direction.current.subVectors(new Vector3(0,0,mZ), new Vector3(mX,0,0)).normalize().multiplyScalar(SPEED).applyEuler(camera.rotation);
+    if (currentlyMoving) {
+      if (isTouchDevice) {
+        // Move relative to current yaw only
+        const yaw = new Euler(0, lookRotation.current.y, 0);
+        direction.current.set(mX, 0, mZ).multiplyScalar(SPEED).applyEuler(yaw);
+      } else {
+        direction.current.subVectors(new Vector3(mX,0,0), new Vector3(0,0,mZ)).normalize().multiplyScalar(SPEED).applyEuler(new Euler(0, camera.rotation.y, 0));
+      }
     }
     
-    direction.current.y = 0;
     const next = camera.position.clone().addScaledVector(direction.current, delta);
     
     let allow = true;
-    if (!hasProgram) {
-      if (camera.position.z > 0.4 && next.z < 0.4) allow = false;
-    }
-    
-    if (next.z < -9.5) allow = false; 
-    if (next.z > 17.5) allow = false; 
+    if (!hasProgram && camera.position.z > 0.4 && next.z < 0.4) allow = false;
+    if (next.z < -9.5 || next.z > 17.5) allow = false; 
     
     if (allow) { 
       camera.position.x = next.x; 
@@ -517,25 +515,15 @@ const Player: React.FC<PlayerProps> = ({
     else if (prevZ.current <= 0 && camera.position.z > 0) onAuditoriumExit();
     prevZ.current = camera.position.z;
     
-    if (camera.position.z > 14.0) {
-      onStageDoorApproach(true);
-    } else {
-      onStageDoorApproach(false);
-    }
+    onStageDoorApproach(camera.position.z > 14.0);
 
     let fU = false;
     let fP = false;
     const usherGroup = scene.getObjectByName("UsherGroup");
     const performerGroup = scene.getObjectByName("PerformerGroup");
 
-    if (usherGroup) {
-      const dist = camera.position.distanceTo(usherGroup.position);
-      if (dist < 5.0) fU = true; 
-    }
-    if (performerGroup) {
-      const dist = camera.position.distanceTo(performerGroup.position);
-      if (dist < 4.0) fP = true;
-    }
+    if (usherGroup && camera.position.distanceTo(usherGroup.position) < 5.0) fU = true; 
+    if (performerGroup && camera.position.distanceTo(performerGroup.position) < 4.0) fP = true;
 
     raycaster.setFromCamera(centerScreen, camera);
     const intersects = raycaster.intersectObjects(scene.children, true);
