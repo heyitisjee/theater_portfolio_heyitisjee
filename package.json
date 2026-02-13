@@ -16,7 +16,8 @@
     "react-dom": "^19.2.3",
     "@react-three/fiber": "^9.5.0",
     "@google/genai": "^1.37.0",
-    "leva": "^0.9.35"
+    "leva": "^0.9.35",
+    "this": "^1.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

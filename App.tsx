@@ -1,14 +1,13 @@
-import React, { Suspense } from 'react';
-import * as THREE from 'three';
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { Preload, Stats } from '@react-three/drei';
 import { PointerLockControls } from '@react-three/drei';
 import TheaterScene from './components/TheaterScene';
-import { Camera, Image as ImageIcon, Scan, Maximize, Zap, X, BookOpen, Star, Loader2, Binoculars, MousePointer2, ChevronRight, ChevronLeft, Trash2 } from 'lucide-react';
+import { X, BookOpen, Star, Binoculars, Trash2, ChevronLeft, ChevronRight, Ticket } from 'lucide-react';
 
-// Inventory Item Types
-type ItemType = 'EMPTY' | 'OPERA_GLASS' | 'BOOK' | 'SIGNED_BOOK' | null;
+export type ItemType = 'EMPTY' | 'OPERA_GLASS' | 'BOOK' | 'SIGNED_BOOK' | 'TICKET' | null;
+
+const TICKET_URL = "https://raw.githubusercontent.com/heyitisjee/theater-assets/b9a54a949ffb47aad1a5427d0684bdd2eb75c0d5/Screen%20Shot%202026-02-13%20at%205.08.04%20PM.png";
 
 const PROGRAM_PAGES = [
   "https://raw.githubusercontent.com/heyitisjee/theater-assets/b1960f5ef0a3ec18401b799b50491f642393eb17/1.png",
@@ -26,818 +25,354 @@ const SOUNDTRACKS = [
   "https://raw.githubusercontent.com/heyitisjee/theater-assets/72545251b5f393d7c81fbaac3e09def7880d7639/No%20More%20-%20Chip%20Zien.mp3"
 ];
 
-const PAGE_BORDER_COLOR = "#000000";
-
 const App: React.FC = () => {
-  // Refs
-  const controlsRef = useRef<any>(null);
-  const lastActivityRef = useRef<number>(Date.now());
-  const isTabHeldRef = useRef(false);
-  const webcamRef = useRef<HTMLVideoElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const hintTimeoutRef = useRef<number | null>(null);
-  const lastInteractionKeyRef = useRef<string | null>(null);
-  const playerPositionRef = useRef({ x: 0, y: 0, z: 0 });
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const hotbarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const promptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const randomHintIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Game State
   const [hasStarted, setHasStarted] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [isReading, setIsReading] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
-  const [isTouchDevice, setIsTouchDevice] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [hasVisitedAuditorium, setHasVisitedAuditorium] = useState(false);
-
-  // Time State
-  const [currentTime, setCurrentTime] = useState(new Date());
-
-  // Mobile Movement State
-  const [joystickPos, setJoystickPos] = useState({ x: 0, y: 0 });
-  const [isMovingJoystick, setIsMovingJoystick] = useState(false);
   
-  // Hotbar State
-  const [hotbar, setHotbar] = useState<ItemType[]>(['EMPTY', 'OPERA_GLASS', null, null, null]);
-  const [activeSlot, setActiveSlot] = useState<number>(0);
-  const [hotbarOpacity, setHotbarOpacity] = useState(0);
-
-  // Tools & Modes
+  // Starting with a ticket in hand (Slot 3)
+  const [hotbar, setHotbar] = useState<ItemType[]>(['EMPTY', 'OPERA_GLASS', 'TICKET', null, null]);
+  const [activeSlot, setActiveSlot] = useState<number>(2); // Start with Ticket selected
+  const [showHotbar, setShowHotbar] = useState(false);
   const [cameraMode, setCameraMode] = useState(false);
   const [inventory, setInventory] = useState<string[]>([]);
   const [galleryOpen, setGalleryOpen] = useState(false);
-  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
   const [flash, setFlash] = useState(false);
+  const [celebFlash, setCelebFlash] = useState(false);
   const [isZooming, setIsZooming] = useState(false);
-
-  // Performer Arrival and Signing
   const [stagePerformerIndex, setStagePerformerIndex] = useState(0);
   const [isPerformerSigning, setIsPerformerSigning] = useState(false);
+  const [isInAuditorium, setIsInAuditorium] = useState(false);
 
-  // AR Video State
-  const [videoOpacity, setVideoOpacity] = useState(0);
-  const [isVideoLoading, setIsVideoLoading] = useState(false);
-  
-  // VIDEO LINKS
-  const CRIMSON_SPECTER_VIDEO = "https://raw.githubusercontent.com/heyitisjee/theater-assets/78c95b4a9970bb402c50c028b4bf9efee27e4245/impressions%20(1).mp4";
-  const AZURE_ECHO_VIDEO = "https://raw.githubusercontent.com/heyitisjee/theater-assets/529235aea42345b51925a87d70e18a90c8d26ec0/version%202%20(created%20as%20a%20game%20with%203D%20assets).mp4";
-  const MIDNIGHT_WHISPERS_VIDEO = "https://raw.githubusercontent.com/heyitisjee/theater-assets/93ab249041af65477dc62c7d6219dd5bab2de3bb/version%202%20-%203D%20with%20occlusion%20test%20(1).mp4";
-  const EMERALD_VOYAGE_VIDEO = "https://raw.githubusercontent.com/heyitisjee/theater-assets/fd801d1f9503a44d635ceba74fbc3cd3e2a46944/Add%20a%20subheading.mp4";
-  const SOLAR_FLARE_VIDEO = "https://raw.githubusercontent.com/heyitisjee/theater-assets/3dff2c2eca882312203b736cff14016b30394163/design.mp4";
-  const GOLDEN_ODYSSEY_VIDEO = "https://raw.githubusercontent.com/heyitisjee/theater-assets/590888900c2f2fae62a12f6b9dad6ee7debdd113/Mulan%E2%80%99s%20friend%20%5BDalu%5D%20Branksome%20Hall%20Asia%2C%20student-made%20production%20of%20Mulan%20(3) (1) (1).mp4";
-  
-  const posterVideos: Record<string, string> = {
-    'First Filter Poster': CRIMSON_SPECTER_VIDEO,
-    'Theater Club Promotion Poster': EMERALD_VOYAGE_VIDEO,
-    'Korean Theater Poster 1': AZURE_ECHO_VIDEO,
-    'Broadway Playbill Poster': SOLAR_FLARE_VIDEO,
-    'Korean Theater Poster 2': MIDNIGHT_WHISPERS_VIDEO,
-    'Theater & AR Portfolio poster': GOLDEN_ODYSSEY_VIDEO
-  };
-
-  const isPhoneActive = cameraMode || galleryOpen;
-
-  // Interaction State
-  const [interactionText, setInteractionText] = useState<string | null>(null);
-  const [activeDialogue, setActiveDialogue] = useState<string | null>(null);
   const [targetedPoster, setTargetedPoster] = useState<string | null>(null);
-  const [activePoster, setActivePoster] = useState<string | null>(null);
-  
   const [isHoveringUsher, setIsHoveringUsher] = useState(false);
   const [isHoveringPerformer, setIsHoveringPerformer] = useState(false);
-  
   const [auditoriumDoorOpen, setAuditoriumDoorOpen] = useState(false);
   const [lobbyDoorOpen, setLobbyDoorOpen] = useState(false);
   const [isSitting, setIsSitting] = useState(false);
   const [sittingChair, setSittingChair] = useState<string | null>(null);
-  const [nearAuditoriumDoor, setNearAuditoriumDoor] = useState(false);
-  const [nearLobbyDoor, setNearLobbyDoor] = useState(false);
   const [targetChair, setTargetChair] = useState<string | null>(null);
-
-  const [nearStageDoor, setNearStageDoor] = useState(false);
   const [performerArrived, setPerformerArrived] = useState(false);
-  const [crowdExcitement, setCrowdExcitement] = useState(false);
+  const [interactionText, setInteractionText] = useState<string | null>(null);
+  const [activeDialogue, setActiveDialogue] = useState<string | null>(null);
+  const [hasShownStageDoorPrompt, setHasShownStageDoorPrompt] = useState(false);
 
-  const activeItem = hotbar[activeSlot];
-  const isHoldingOperaGlass = activeItem === 'OPERA_GLASS';
-  const isHoldingBook = activeItem === 'BOOK' || activeItem === 'SIGNED_BOOK';
-  const currentTargetFov = (isHoldingOperaGlass && isZooming) ? 30 : 75;
+  const hasProgram = hotbar.includes('BOOK') || hotbar.includes('SIGNED_BOOK');
+  const equippedItem = hotbar[activeSlot];
 
-  // Soundtrack Logic - Original Requirement
+  // Usher hints logic
   useEffect(() => {
-    const isPlayerInAuditorium = playerPositionRef.current.z <= 0.5;
-    const shouldPlay = isPlayerInAuditorium && isSitting && hasStarted;
+    if (hasStarted && !isInAuditorium) {
+      // Random gallery hint every 60-90 seconds
+      const triggerRandomHint = () => {
+        if (!isInAuditorium && !activeDialogue && inventory.length > 0) {
+          setActiveDialogue("Usher: You can see your captured photos by pressing 'V'.");
+          setTimeout(() => setActiveDialogue(null), 5000);
+        }
+      };
+      
+      randomHintIntervalRef.current = setInterval(() => {
+        if (Math.random() > 0.5) triggerRandomHint();
+      }, 70000);
+    }
 
+    return () => {
+      if (randomHintIntervalRef.current) clearInterval(randomHintIntervalRef.current);
+    };
+  }, [hasStarted, isInAuditorium, inventory.length]);
+
+  useEffect(() => {
+    if (hasStarted) {
+      setShowHotbar(true);
+      if (hotbarTimerRef.current) clearTimeout(hotbarTimerRef.current);
+      hotbarTimerRef.current = setTimeout(() => setShowHotbar(false), 4000);
+    }
+  }, [hasStarted, hotbar]);
+
+  // Items that can be inspected full-screen (Book, Signed Book, Ticket)
+  const isInspectable = equippedItem === 'BOOK' || equippedItem === 'SIGNED_BOOK' || equippedItem === 'TICKET';
+  const currentTargetFov = (equippedItem === 'OPERA_GLASS' && isZooming) ? 30 : 75;
+
+  useEffect(() => {
+    const shouldPlay = isInAuditorium && isSitting && hasStarted;
     if (shouldPlay) {
       const trackUrl = SOUNDTRACKS[stagePerformerIndex] || SOUNDTRACKS[0];
-      if (!audioRef.current) {
+      if (!audioRef.current || audioRef.current.src !== trackUrl) {
+        if(audioRef.current) audioRef.current.pause();
         audioRef.current = new Audio(trackUrl);
         audioRef.current.loop = true;
-        audioRef.current.volume = 0.5;
-        audioRef.current.play().catch(e => console.warn("Audio blocked:", e));
-      } else if (audioRef.current.src !== trackUrl) {
-        audioRef.current.pause();
-        audioRef.current.src = trackUrl;
-        audioRef.current.play().catch(e => console.warn("Audio blocked:", e));
+        audioRef.current.volume = 0.12; 
+        audioRef.current.play().catch(() => {});
       }
-    } else {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
+    } else if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
     }
+  }, [isSitting, stagePerformerIndex, hasStarted, isInAuditorium]);
 
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-    };
-  }, [isSitting, stagePerformerIndex, hasStarted]);
-
-  // Multi-layered Escape handling
-  useEffect(() => {
-    const onPointerLockChange = () => {
-      const currentlyLocked = document.pointerLockElement !== null;
-      setIsLocked(currentlyLocked);
-    };
-
-    const handleGlobalEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setIsReading(false);
-        setGalleryOpen(false);
-        setCameraMode(false);
-        setSelectedPhotoIndex(null);
-        
-        if (isSitting) {
-            setIsSitting(false);
-            setSittingChair(null);
-        }
-
-        if (document.pointerLockElement) {
-          document.exitPointerLock();
-        }
-        
-        setIsLocked(false);
-      }
-    };
-
-    document.addEventListener('pointerlockchange', onPointerLockChange);
-    window.addEventListener('keydown', handleGlobalEsc, { capture: true });
+  const takePhoto = useCallback((dataUrl?: string) => {
+    setFlash(true); 
+    setTimeout(() => setFlash(false), 100);
     
-    return () => {
-      document.removeEventListener('pointerlockchange', onPointerLockChange);
-      window.removeEventListener('keydown', handleGlobalEsc, { capture: true });
-    };
-  }, [isSitting]);
-
-  const playAutographSound = () => {
-    try {
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(523.25, ctx.currentTime); 
-      osc.frequency.exponentialRampToValueAtTime(1046.50, ctx.currentTime + 0.3); 
-      gain.gain.setValueAtTime(0.1, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.6);
-    } catch (e) {
-      console.warn("Audio Context blocked", e);
-    }
-  };
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000); 
-    return () => clearInterval(timer);
-  }, []);
-
-  const formattedTime = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-  const formattedDate = currentTime.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
-  const formattedLocation = Intl.DateTimeFormat().resolvedOptions().timeZone.split('/').pop()?.replace('_', ' ') || 'Local';
-
-  useEffect(() => {
-    const handleActivity = () => { lastActivityRef.current = Date.now(); };
-    window.addEventListener('mousemove', handleActivity);
-    window.addEventListener('touchstart', handleActivity);
-    return () => {
-      window.removeEventListener('mousemove', handleActivity);
-      window.removeEventListener('touchstart', handleActivity);
-    };
-  }, []);
-
-  useEffect(() => {
-    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
-  }, []);
-
-  const toggleFullscreen = useCallback(() => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(e => console.error(e));
-      setIsFullscreen(true);
+    if (dataUrl) {
+      setInventory(prev => [dataUrl, ...prev]);
     } else {
-      document.exitFullscreen();
-      setIsFullscreen(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (cameraMode) {
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-        .then(stream => {
-          if (webcamRef.current) {
-            webcamRef.current.srcObject = stream;
-          }
-        })
-        .catch(console.error);
-    } else {
-      if (webcamRef.current && webcamRef.current.srcObject) {
-        (webcamRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
+      const canvas = document.querySelector('canvas');
+      if (canvas) {
+        setInventory(prev => [canvas.toDataURL('image/png'), ...prev]);
       }
     }
-  }, [cameraMode]);
-
-  useEffect(() => {
-    if (targetedPoster) {
-      setActivePoster(targetedPoster);
-    } else {
-      const timer = setTimeout(() => setActivePoster(null), 300);
-      return () => clearTimeout(timer);
-    }
-  }, [targetedPoster]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    if (cameraMode && activePoster && posterVideos[activePoster]) {
-      const targetSrc = posterVideos[activePoster];
-      if (video.src !== targetSrc) {
-        setIsVideoLoading(true);
-        setVideoOpacity(0);
-        video.src = targetSrc;
-        video.load();
-        video.muted = false; // Enable sound
-        video.play().catch(() => setIsVideoLoading(false));
-      } else {
-        if (video.paused) {
-          video.muted = false; // Enable sound
-          video.play();
-        }
-        setVideoOpacity(1);
-      }
-    } else {
-      setVideoOpacity(0);
-      setIsVideoLoading(false);
-      if (video && !video.paused) {
-        video.pause();
-      }
-    }
-  }, [cameraMode, activePoster]);
-  
-  useEffect(() => {
-    if (nearStageDoor && !performerArrived && hasVisitedAuditorium) {
-       showDialogue("Fan: LOOK! She's coming out! Over here!!", 4000);
-       setCrowdExcitement(true);
-       const arrivalTimer = setTimeout(() => {
-          setPerformerArrived(true);
-          setTimeout(() => setCrowdExcitement(false), 8000);
-       }, 1500);
-       return () => clearTimeout(arrivalTimer);
-    }
-  }, [nearStageDoor, performerArrived, hasVisitedAuditorium]);
-
-  useEffect(() => {
-    if (hasVisitedAuditorium) {
-      setLobbyDoorOpen(nearLobbyDoor);
-    } else {
-      setLobbyDoorOpen(false);
-    }
-  }, [nearLobbyDoor, hasVisitedAuditorium]);
-
-  const handleAuditoriumEntry = useCallback(() => {
-    setHasVisitedAuditorium(true);
-    setStagePerformerIndex(Math.floor(Math.random() * 3));
-  }, []);
-
-  const handleAuditoriumExit = useCallback(() => {
-    setAuditoriumDoorOpen(false);
-  }, []);
-
-  const triggerHotbar = useCallback(() => {
-    setHotbarOpacity(1);
-    lastActivityRef.current = Date.now();
-  }, []);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const timeSinceActivity = Date.now() - lastActivityRef.current;
-      if (timeSinceActivity > 2000 && !isTabHeldRef.current && !cameraMode) {
-        setHotbarOpacity(0);
-      }
-    }, 100);
-    return () => clearInterval(interval);
-  }, [cameraMode]);
-
-  const takePhoto = useCallback(async () => {
-    const canvas = document.querySelector('canvas');
-    if (!canvas) return;
-    setFlash(true);
-    setTimeout(() => setFlash(false), 150);
-    const dataUrl = canvas.toDataURL('image/png');
-    setInventory(prev => [dataUrl, ...prev]);
-  }, []);
-
-  const showDialogue = useCallback((text: string, duration: number = 3500) => {
-    setActiveDialogue(text);
-    setTimeout(() => setActiveDialogue(null), duration);
   }, []);
 
   const receiveBook = useCallback(() => {
-    setHotbar(prev => {
-      const newHotbar = [...prev];
-      newHotbar[2] = 'BOOK';
-      return newHotbar;
-    });
-    setActiveSlot(2); 
-    triggerHotbar();
-    setAuditoriumDoorOpen(true);
-    showDialogue("Usher: Here is your program. Enjoy the show!");
-  }, [triggerHotbar, showDialogue, auditoriumDoorOpen]);
+    // Replaces slot 2 (Ticket) with the Program Book
+    setHotbar(prev => { let n = [...prev]; n[2] = 'BOOK'; return n; });
+    setActiveSlot(2); setAuditoriumDoorOpen(true);
+    setActiveDialogue("Usher: Here is your program. Enjoy the show!");
+    setTimeout(() => setActiveDialogue(null), 3500);
+  }, []);
 
   const receiveAutograph = useCallback(() => {
-     const bookIndex = hotbar.indexOf('BOOK');
-     const signedBookIndex = hotbar.indexOf('SIGNED_BOOK');
-     
-     if (bookIndex !== -1) {
+     if (hasProgram && hotbar.includes('BOOK')) {
        setIsPerformerSigning(true);
-       playAutographSound();
-       setHotbar(prev => {
-         const newHotbar = [...prev];
-         newHotbar[bookIndex] = 'SIGNED_BOOK';
-         return newHotbar;
+       setHotbar(prev => { 
+         let n = [...prev]; 
+         const idx = n.indexOf('BOOK');
+         if(idx !== -1) n[idx] = 'SIGNED_BOOK'; 
+         return n; 
        });
-       setActiveSlot(bookIndex);
-       triggerHotbar();
-       showDialogue("Performer: Hope you enjoyed the show! 조심히가세요!");
-       setTimeout(() => setIsPerformerSigning(false), 2000);
-     } else if (signedBookIndex !== -1) {
-       showDialogue("Performer: I've already signed your program, dear. Have a lovely evening!");
-     } else {
-       showDialogue("Performer: Oh, you don't have a program? Go see the usher inside for one!");
+       setActiveDialogue("Performer: Here's my autograph! Hope you liked the show!");
+       setTimeout(() => { setIsPerformerSigning(false); setActiveDialogue(null); }, 3000);
+     } else if (hotbar.includes('SIGNED_BOOK')) {
+       setActiveDialogue("Performer: Thanks for coming! Safe travels!");
+       setTimeout(() => setActiveDialogue(null), 3000);
      }
-  }, [hotbar, triggerHotbar, showDialogue]);
-
-  const nextPage = useCallback((e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    setCurrentPage(prev => (prev + 1) % PROGRAM_PAGES.length);
-  }, []);
-
-  const prevPage = useCallback((e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    setCurrentPage(prev => (prev - 1 + PROGRAM_PAGES.length) % PROGRAM_PAGES.length);
-  }, []);
-
-  const handleJoystickMove = (e: React.TouchEvent) => {
-    const touch = e.touches[0];
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-    const dx = touch.clientX - centerX;
-    const dy = touch.clientY - centerY;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    const maxDist = rect.width / 2;
-    const power = Math.min(dist / maxDist, 1);
-    const angle = Math.atan2(dy, dx);
-    setJoystickPos({ x: Math.cos(angle) * power, y: Math.sin(angle) * power });
-  };
-
-  const handlePhoneClose = useCallback(() => {
-    if (selectedPhotoIndex !== null) {
-      setSelectedPhotoIndex(null);
-    } else {
-      setGalleryOpen(false);
-      setCameraMode(false);
-    }
-  }, [selectedPhotoIndex]);
+  }, [hasProgram, hotbar]);
 
   useEffect(() => {
     const handleMouseDown = (e: MouseEvent) => { 
       if (e.button === 2) setIsZooming(true); 
-      if (e.button === 0 && isHoldingBook && isLocked && !isPhoneActive) {
-        setIsReading(prev => !prev);
-        if (!isReading) setCurrentPage(0);
-      }
-      if (e.button === 0 && cameraMode && isLocked) {
-        takePhoto();
+      if (e.button === 0 && isInspectable && isLocked && !cameraMode && !galleryOpen) {
+        setIsReading(prev => !prev); if (!isReading) setCurrentPage(0);
       }
     };
     const handleMouseUp = (e: MouseEvent) => { if (e.button === 2) setIsZooming(false); };
-    const handleContextMenu = (e: MouseEvent) => e.preventDefault();
-
     window.addEventListener('mousedown', handleMouseDown);
     window.addEventListener('mouseup', handleMouseUp);
-    window.addEventListener('contextmenu', handleContextMenu);
-
+    
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!isLocked && !isPhoneActive && !isReading && hasStarted && !['KeyC', 'KeyV', 'Escape'].includes(e.code)) return; 
-      
       if (isReading) {
-        if (e.code === 'ArrowRight' || e.code === 'Space') { nextPage(); return; }
-        if (e.code === 'ArrowLeft') { prevPage(); return; }
+        if (equippedItem !== 'TICKET') {
+          if (e.code === 'ArrowRight' || e.code === 'Space') { setCurrentPage(p => (p + 1) % PROGRAM_PAGES.length); return; }
+          if (e.code === 'ArrowLeft') { setCurrentPage(p => (p - 1 + PROGRAM_PAGES.length) % PROGRAM_PAGES.length); return; }
+        }
       }
-
-      if (['1', '2', '3', '4', '5'].includes(e.key)) {
-        setActiveSlot(parseInt(e.key) - 1);
-        triggerHotbar();
-      }
-      if (e.code === 'Tab') { e.preventDefault(); isTabHeldRef.current = true; triggerHotbar(); }
+      if (['1', '2', '3', '4', '5'].includes(e.key)) setActiveSlot(parseInt(e.key) - 1);
       switch(e.code) {
         case 'KeyZ': setIsZooming(true); break;
         case 'KeyC': 
-            if (!isReading && hasStarted) {
-                const togglingCamera = !cameraMode;
-                if (togglingCamera) {
-                    setGalleryOpen(false);
-                    setCameraMode(true);
-                } else {
-                    setCameraMode(false);
-                }
-            }
-            break;
-        case 'KeyV':
-            if (hasStarted && !isReading) {
-                const togglingGallery = !galleryOpen;
-                setGalleryOpen(togglingGallery);
-                if (togglingGallery) {
-                    setCameraMode(false);
-                    if (document.pointerLockElement) document.exitPointerLock();
-                }
-            }
-            break;
-        case 'KeyE':
-        case 'KeyR':
-          if (isHoveringUsher) {
-            if (hotbar[2] === null) receiveBook();
-            else {
-               setAuditoriumDoorOpen(true);
-               showDialogue("Usher: Enjoy the show! Press 2 to equip the opera glass.");
-            }
-          } else if (nearAuditoriumDoor && !auditoriumDoorOpen) {
-            showDialogue("Usher: Talk to me! You'll need a program to enter.");
-          } else if (nearLobbyDoor && !hasVisitedAuditorium) {
-            showDialogue("Usher: Stage door will be opened after the show!");
-          }
+          setCameraMode(p => !p); 
+          setGalleryOpen(false); 
+          break;
+        case 'KeyV': 
+          setGalleryOpen(p => !p); 
+          setCameraMode(false); 
+          break;
+        case 'Space':
+          if (cameraMode && !isReading) takePhoto();
+          break;
+        case 'KeyE': case 'KeyR':
+          if (isHoveringUsher) { if (hotbar.includes('TICKET')) receiveBook(); else setAuditoriumDoorOpen(true); }
           break;
         case 'KeyG': if (isHoveringPerformer && performerArrived) receiveAutograph(); break;
         case 'KeyF':
           if (isSitting) { setIsSitting(false); setSittingChair(null); }
-          else if (targetChair && playerPositionRef.current.z <= 0.5) { setIsSitting(true); setSittingChair(targetChair); }
+          else if (targetChair && isInAuditorium) { setIsSitting(true); setSittingChair(targetChair); }
           break;
-        case 'Space': case 'Enter': if (cameraMode) takePhoto(); break;
       }
     };
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'Tab') isTabHeldRef.current = false;
-      if (e.code === 'KeyZ') setIsZooming(false);
-    };
-    const handleWheel = (e: WheelEvent) => {
-      if (!isLocked || cameraMode || isReading || galleryOpen) return;
-      const direction = Math.sign(e.deltaY);
-      setActiveSlot(prev => (prev + direction + 5) % 5);
-      triggerHotbar();
-    };
-
+    const handleKeyUp = (e: KeyboardEvent) => { if (e.code === 'KeyZ') setIsZooming(false); };
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('wheel', handleWheel);
     return () => {
       window.removeEventListener('mousedown', handleMouseDown);
       window.removeEventListener('mouseup', handleMouseUp);
-      window.removeEventListener('contextmenu', handleContextMenu);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
-      window.removeEventListener('wheel', handleWheel);
     };
-  }, [isLocked, hasStarted, cameraMode, galleryOpen, isPhoneActive, handlePhoneClose, nearAuditoriumDoor, nearLobbyDoor, targetChair, isSitting, takePhoto, activeSlot, hotbar, isHoveringUsher, isHoveringPerformer, performerArrived, receiveBook, receiveAutograph, triggerHotbar, isReading, isHoldingBook, nextPage, prevPage, showDialogue, auditoriumDoorOpen, isTouchDevice, hasVisitedAuditorium]);
+  }, [isLocked, hasStarted, cameraMode, galleryOpen, isInspectable, hotbar, isHoveringUsher, isHoveringPerformer, performerArrived, targetChair, isSitting, takePhoto, receiveBook, receiveAutograph, isInAuditorium, hasProgram, equippedItem, isReading]);
 
   useEffect(() => {
     let text: string | null = null;
-    let key: string | null = null;
-    const isInside = playerPositionRef.current.z <= 0.5;
+    let autoHide = false;
 
-    if (activeDialogue) { text = activeDialogue; key = 'dialogue'; }
-    else if (isReading) { text = "Reading Mode | Press [ESC] to Stop"; key = 'reading'; }
-    else if (galleryOpen) { text = "Gallery View | [V] or [ESC] to Exit"; key = 'gallery-active'; }
-    else if (isSitting) { text = "Press [F] to Stand"; key = 'sit-stand'; }
-    else if (targetChair && isInside) { text = "Press [F] to Sit"; key = `sit-chair-${targetChair}`; }
-    else if (isHoveringUsher) {
-       if (hotbar[2] === null) { text = "Press [R] to talk to Usher"; key = 'usher-book'; }
-       else { text = "Press [R] to ask Usher to open doors"; key = 'usher-reopen'; }
-    } else if (nearAuditoriumDoor && !auditoriumDoorOpen && !isInside) {
-       text = "Talk to the Usher to enter"; key = 'usher-needed';
-    } else if (nearLobbyDoor && !hasVisitedAuditorium) {
-       text = "Press [R] to check Stage Door"; key = 'lobby-locked';
+    if (activeDialogue) {
+      text = activeDialogue;
+    } else if (isReading) {
+      text = "Inspecting Item | Press [ESC] to Stop";
+    } else if (isSitting) {
+      text = "Press [F] to Stand";
+      autoHide = true;
+    } else if (targetChair && isInAuditorium) {
+      text = "Press [F] to Sit";
+      autoHide = true;
+    } else if (isHoveringUsher) {
+      text = hotbar.includes('TICKET') ? "Show Ticket to Usher [R]" : "Talk to Usher [R]";
     } else if (isHoveringPerformer && performerArrived) {
-       text = "Press [G] to ask for Autograph"; key = 'performer';
-    } else if (nearStageDoor && !performerArrived) { 
-       text = hasVisitedAuditorium ? "Fans: Is she coming out yet?" : "Stage Door area restricted."; key = 'fans'; 
+      text = hotbar.includes('SIGNED_BOOK') ? "Greet Performer [G]" : "Get Signed Program [G]";
     }
-    else if (cameraMode) { text = "Camera Mode | [Left Click] to Shoot | [V] for Gallery"; key = 'camera-active'; }
-    else if (isHoldingBook) { text = "Left Click to Read Program"; key = 'book-hint'; }
-    else if (isHoldingOperaGlass && !isZooming) { text = "Hold [Z] or Right Click to Zoom"; key = 'zoom-hint'; }
 
-    if (key !== lastInteractionKeyRef.current) {
-        lastInteractionKeyRef.current = key;
-        if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
-        if (text) {
-          setInteractionText(text);
-          hintTimeoutRef.current = window.setTimeout(() => setInteractionText(null), 4000);
-        } else {
-          setInteractionText(null);
-        }
+    setInteractionText(text);
+
+    if (promptTimerRef.current) clearTimeout(promptTimerRef.current);
+    if (autoHide && text) {
+      promptTimerRef.current = setTimeout(() => {
+        setInteractionText(null);
+      }, 3000);
     }
-  }, [nearAuditoriumDoor, nearLobbyDoor, auditoriumDoorOpen, lobbyDoorOpen, targetChair, isSitting, isHoveringUsher, isHoveringPerformer, performerArrived, nearStageDoor, hotbar, isReading, isHoldingBook, activeDialogue, cameraMode, isZooming, isHoldingOperaGlass, hasStarted, isLocked, hasVisitedAuditorium, isPhoneActive, galleryOpen]);
-
-  const deletePhoto = (index: number) => {
-    setInventory(prev => prev.filter((_, i) => i !== index));
-    if (selectedPhotoIndex === index) setSelectedPhotoIndex(null);
-  };
-
-  const readingSource = (currentPage === 0 && activeItem === 'SIGNED_BOOK') ? SIGNED_PROGRAM_FIRST_PAGE : PROGRAM_PAGES[currentPage];
+  }, [activeDialogue, isReading, isSitting, targetChair, isHoveringUsher, isHoveringPerformer, performerArrived, cameraMode, isInAuditorium, hotbar]);
 
   return (
-    <div className="relative w-full h-full bg-black select-none overflow-hidden font-sans">
-      <video ref={webcamRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover z-0 opacity-100 pointer-events-none" />
+    <div className="relative w-full h-full bg-[#020202] select-none overflow-hidden font-sans">
+      {isLocked && !cameraMode && !galleryOpen && !isReading && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] pointer-events-none">
+          <div className="w-1.5 h-1.5 bg-white rounded-full border border-black/50" />
+        </div>
+      )}
 
-      <div className={`transition-opacity duration-700 w-full h-full z-10 relative`}>
-        <Canvas 
-          dpr={[1, 2]} // Prevents lag on high-resolution screens
-          frameloop="demand" // Only renders when needed, stops the "fan noise"
-          shadows={{ 
-            type: 1, // Uses BasicShadowMap for better performance
-            enabled: true 
-          }}
-          camera={{ position: [0, 5, 10], fov: 45 }}
-        >
-          <Suspense fallback={null}>
-             <TheaterModel />
-             <Preload all /> {/* Forces assets to load before the scene starts */}
-          </Suspense>
-          <Stats /> {/* Remove this line once you're happy with the speed! */}
+      {/* Persistence Shortcuts Overlay */}
+      {hasStarted && !isReading && (
+        <div className="absolute bottom-10 left-10 z-[150] pointer-events-none flex flex-col gap-1 text-white/50 font-black uppercase tracking-[0.2em] text-[9px] drop-shadow-lg text-left">
+          <p>WASD to move</p>
+          <p>C for camera</p>
+          <p>V for gallery</p>
+          <p className="text-white/80 animate-pulse mt-2">Try taking pictures of the posters!</p>
+        </div>
+      )}
+
+      <div className={`transition-opacity duration-1000 w-full h-full z-10 relative ${hasStarted ? 'opacity-100' : 'opacity-0'}`}>
+        <Canvas shadows camera={{ fov: 75, position: [0, 2.5, 5] }} gl={{ preserveDrawingBuffer: true, alpha: true, antialias: true, powerPreference: 'high-performance' }} dpr={[1, 1.5]}>
+          <TheaterScene 
+            onTargetChange={setTargetedPoster} 
+            onChairTargetChange={setTargetChair}
+            onAuditoriumDoorDistanceChange={() => {}}
+            onLobbyDoorDistanceChange={setLobbyDoorOpen}
+            onUsherHover={setIsHoveringUsher}
+            onStageDoorApproach={(near) => { 
+              if (near) {
+                if (!performerArrived && !isInAuditorium) {
+                  if (hasProgram) {
+                    setPerformerArrived(true);
+                    setLobbyDoorOpen(true);
+                    setCelebFlash(true);
+                    setTimeout(() => setCelebFlash(false), 100);
+                  } else if (!hasShownStageDoorPrompt) {
+                    setHasShownStageDoorPrompt(true);
+                    setActiveDialogue("The stage door opens after you've seen the show!");
+                    setTimeout(() => setActiveDialogue(null), 4000);
+                  }
+                } else if (performerArrived) {
+                  setLobbyDoorOpen(true);
+                }
+              } else {
+                setLobbyDoorOpen(false); 
+              }
+            }}
+            onPerformerHover={setIsHoveringPerformer}
+            onAuditoriumEntry={() => { 
+              if (!hasProgram) {
+                setActiveDialogue("Usher: Let me check your ticket please!");
+                setTimeout(() => setActiveDialogue(null), 4000);
+              } else {
+                setIsInAuditorium(true); 
+                setStagePerformerIndex(Math.floor(Math.random() * 3)); 
+              }
+            }}
+            onAuditoriumExit={() => { setIsInAuditorium(false); setAuditoriumDoorOpen(false); }}
+            onPositionUpdate={(pos) => {}}
+            highlightedPoster={targetedPoster} 
+            auditoriumDoorOpen={auditoriumDoorOpen}
+            lobbyDoorOpen={lobbyDoorOpen}
+            isSitting={isSitting}
+            sittingChairId={sittingChair}
+            isCameraActive={cameraMode}
+            performerArrived={performerArrived}
+            stagePerformerIndex={stagePerformerIndex}
+            isPerformerSigning={isPerformerSigning}
+            fov={currentTargetFov}
+            isInAuditorium={isInAuditorium}
+            equippedItem={equippedItem}
+            hasProgram={hasProgram}
+            phoneProps={{
+              cameraMode,
+              setCameraMode,
+              galleryOpen,
+              setGalleryOpen,
+              inventory,
+              setInventory,
+              takePhoto,
+              flash,
+              targetedPoster
+            }}
+          />
+          {hasStarted && <PointerLockControls onLock={() => setIsLocked(true)} onUnlock={() => setIsLocked(false)} />}
         </Canvas>
       </div>
-      <div className={`absolute inset-0 bg-white pointer-events-none z-[100] transition-opacity duration-150 ${flash ? 'opacity-100' : 'opacity-0'}`} />
-
-      {hasStarted && !isLocked && !isReading && !galleryOpen && !cameraMode && !isTouchDevice && (
-        <div className="absolute inset-0 z-[160] flex flex-col items-center justify-center bg-black/70 backdrop-blur-[12px] cursor-default pointer-events-auto animate-in fade-in duration-300">
-           <div 
-             className="p-12 bg-zinc-900/95 rounded-[40px] border border-white/20 shadow-4xl flex flex-col items-center max-w-sm text-center animate-in zoom-in duration-300"
-             onClick={(e) => e.stopPropagation()}
-           >
-             <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center mb-8 border border-white/20 shadow-inner">
-               <MousePointer2 size={32} className="text-white opacity-90 animate-pulse" />
-             </div>
-             <h2 className="text-white text-xl font-black uppercase tracking-tighter mb-2">Theater Paused</h2>
-             <p className="text-white/40 text-[10px] mb-8 uppercase tracking-[0.2em] font-bold leading-relaxed">Your cursor is currently free. You can use your browser or click below to return to the experience.</p>
-             
-             <div className="flex flex-col gap-3 w-full">
-               <button 
-                 onClick={() => { try { controlsRef.current?.lock(); } catch(e) {} }}
-                 className="w-full py-4 bg-white text-black font-black uppercase tracking-[0.3em] text-[10px] rounded-2xl hover:scale-105 transition-transform shadow-xl"
-               >
-                 Resume Experience
-               </button>
-               <button 
-                 onClick={() => window.location.reload()}
-                 className="w-full py-3 bg-zinc-800 text-white/50 font-black uppercase tracking-[0.3em] text-[9px] rounded-2xl hover:bg-zinc-700 transition-colors"
-               >
-                 Emergency Reset
-               </button>
-             </div>
-           </div>
-           <p className="mt-12 text-white/30 text-[9px] font-black uppercase tracking-[0.6em] animate-pulse">Cursor Unlocked | Press [ESC] to release cursor at any time</p>
-        </div>
-      )}
-
-      {isLocked && !isReading && !galleryOpen && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[80] pointer-events-none flex items-center justify-center">
-           <div className={`w-1 h-1 bg-white rounded-full transition-all duration-300 ${interactionText ? 'scale-[6] opacity-0' : 'opacity-100'}`} />
-           <div className={`absolute w-6 h-6 border-2 border-white/50 rounded-full transition-all duration-300 ${interactionText ? 'scale-110 opacity-100' : 'scale-50 opacity-0'}`} />
-        </div>
-      )}
-
-      <div className={`absolute inset-0 pointer-events-none z-40 bg-black/80 transition-opacity duration-500 ${isZooming && isHoldingOperaGlass ? 'opacity-100' : 'opacity-0'}`}
-           style={{ maskImage: 'radial-gradient(circle at center, transparent 35%, black 65%)', WebkitMaskImage: 'radial-gradient(circle at center, transparent 35%, black 65%)' }} />
-
-      {isReading && (
-        <div className="absolute inset-0 z-[120] flex items-center justify-center animate-in fade-in duration-300">
-           <div className="absolute inset-0 bg-black/80 backdrop-blur-xl" onClick={() => setIsReading(false)} />
-           <div className="relative w-full h-full sm:max-w-4xl sm:max-h-[85vh] flex flex-col items-center justify-center p-4">
-              <div 
-                className="relative group w-full aspect-[4/3] max-h-[80vh] shadow-[0_0_80px_rgba(0,0,0,1)] rounded-sm overflow-hidden flex items-center justify-center border-4 border-black" 
-                style={{ backgroundColor: PAGE_BORDER_COLOR }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                 <img 
-                    src={readingSource} 
-                    className="h-full w-auto object-contain select-none shadow-2xl"
-                    alt={`Program Page ${currentPage + 1}`}
-                    loading="eager"
-                 />
-                 <div className="absolute inset-0 flex justify-between items-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    <button onClick={prevPage} className="p-4 bg-black/40 text-white rounded-r-full hover:bg-black/60 transition-colors pointer-events-auto ml-2"><ChevronLeft size={48} /></button>
-                    <button onClick={nextPage} className="p-4 bg-black/40 text-white rounded-l-full hover:bg-black/60 transition-colors pointer-events-auto mr-2"><ChevronRight size={48} /></button>
-                 </div>
-                 <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-black/60 rounded-full text-white/60 text-[10px] font-black uppercase tracking-[0.3em]">
-                    Page {currentPage + 1} / {PROGRAM_PAGES.length}
-                 </div>
-              </div>
-              <button onClick={() => setIsReading(false)} className="mt-6 px-10 py-3 bg-white text-black font-black uppercase text-[10px] tracking-widest rounded-full hover:scale-105 transition-transform">Close Program</button>
-           </div>
-        </div>
-      )}
 
       {!hasStarted && (
-        <div className="absolute inset-0 flex items-center justify-center z-[200] bg-zinc-950">
-          <div className="text-center p-6 sm:p-12 max-w-2xl animate-in fade-in duration-700">
-            <h1 className="text-5xl sm:text-7xl font-black mb-4 text-white tracking-tighter uppercase">Hyeji Kim Portfolio</h1>
-            <div className="w-24 h-1 bg-white mx-auto mb-8"></div>
-            <p className="text-zinc-500 mb-10 text-[10px] uppercase tracking-[0.3em] leading-loose">
-              WASD to move around, use phone to take pictures and scan posters, enjoy the show and be happy!
+        <div className="absolute inset-0 flex items-center justify-center z-[200] bg-zinc-950 text-white p-8">
+          <div className="text-center max-w-5xl flex flex-col items-center">
+            <h1 className="text-5xl sm:text-7xl font-black uppercase tracking-tighter leading-tight mb-4">Hyeji Kim Portfolio</h1>
+            <p className="text-white/60 mb-16 text-[14px] font-normal uppercase tracking-[0.5em] leading-relaxed max-w-2xl mx-auto">
+              show starting in 5.....4....3...2..1!
             </p>
-            <div className="flex flex-col gap-4 items-center">
-              <button className="px-12 py-5 bg-white text-black font-black hover:scale-105 transition-transform uppercase tracking-[0.2em] text-[10px] shadow-2xl w-full sm:w-auto" 
-                      onClick={() => { setHasStarted(true); if (!isTouchDevice) { setTimeout(() => controlsRef.current?.lock(), 100); } else setIsLocked(true); }}>Enter Experience</button>
-              <button className="px-12 py-3 bg-zinc-800 text-white font-black hover:bg-zinc-700 transition-colors uppercase tracking-[0.2em] text-[10px] w-full sm:w-auto" 
-                      onClick={toggleFullscreen}><Maximize size={14} className="inline mr-2" /> Full Screen</button>
-            </div>
+            <button className="px-10 py-3 bg-white text-black font-black hover:scale-105 transition-transform uppercase tracking-[0.3em] text-[11px] shadow-[0_0_80px_rgba(255,255,255,0.2)]" onClick={() => setHasStarted(true)}>Enter Experience</button>
           </div>
         </div>
       )}
 
-      {isTouchDevice && hasStarted && isLocked && (
-        <div className="absolute inset-0 z-[60] pointer-events-none">
-          <div className="absolute bottom-12 left-12 w-32 h-32 bg-white/5 border border-white/10 rounded-full pointer-events-auto flex items-center justify-center touch-none"
-               onTouchStart={() => setIsMovingJoystick(true)}
-               onTouchMove={handleJoystickMove}
-               onTouchEnd={() => { setIsMovingJoystick(false); setJoystickPos({ x: 0, y: 0 }); }}>
-            <div className="w-12 h-12 bg-white/20 border border-white/40 rounded-full shadow-2xl transition-transform duration-75"
-                 style={{ transform: `translate(${joystickPos.x * 40}px, ${joystickPos.y * 40}px)` }} />
+      {interactionText && !isReading && !cameraMode && !galleryOpen && (
+        <div className={`absolute left-1/2 -translate-x-1/2 z-[150] pointer-events-none transition-all duration-500 top-[22%] scale-100`}>
+          <div className="bg-white/95 px-10 py-3 rounded-full text-black text-[12px] font-black uppercase tracking-[0.2em] shadow-2xl border border-black/10 animate-pulse">
+            {interactionText}
           </div>
         </div>
       )}
 
-      {interactionText && !galleryOpen && (
-        <div className="absolute top-[65%] left-1/2 -translate-x-1/2 z-[90] pointer-events-none">
-          <div className="bg-white/90 backdrop-blur-md text-black px-6 py-3 rounded-full text-[10px] font-black uppercase tracking-widest shadow-2xl animate-in fade-in zoom-in duration-500 text-center whitespace-nowrap">{interactionText}</div>
+      {isReading && (
+        <div className="absolute inset-0 z-[120] flex items-center justify-center bg-black/98 backdrop-blur-3xl p-12 animate-in fade-in duration-500">
+           {equippedItem === 'TICKET' ? (
+             <img src={TICKET_URL} className="max-w-[90vw] max-h-[70vh] object-contain shadow-[0_0_120px_rgba(255,255,255,0.1)] rounded-sm" />
+           ) : (
+             <>
+               <img src={(currentPage === 0 && equippedItem === 'SIGNED_BOOK') ? SIGNED_PROGRAM_FIRST_PAGE : PROGRAM_PAGES[currentPage]} className="h-full max-h-[85vh] object-contain shadow-[0_0_120px_rgba(0,0,0,0.9)] rounded-sm" />
+               <div className="absolute bottom-12 flex gap-10">
+                  <button onClick={() => setCurrentPage(p => (p - 1 + PROGRAM_PAGES.length) % PROGRAM_PAGES.length)} className="p-8 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all active:scale-90"><ChevronLeft size={56}/></button>
+                  <button onClick={() => setCurrentPage(p => (p + 1) % PROGRAM_PAGES.length)} className="p-8 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all active:scale-90"><ChevronRight size={56}/></button>
+               </div>
+             </>
+           )}
+           <button onClick={() => setIsReading(false)} className="absolute top-12 right-12 p-5 text-white hover:bg-white/10 rounded-full transition-all"><X size={40}/></button>
         </div>
       )}
 
-      {hasStarted && (
-        <div className="absolute inset-0 z-50 pointer-events-none overflow-hidden">
-          {/* HAND TOOLS VIEW */}
-          <div className={`absolute bottom-[-20px] left-[-30px] w-[180px] sm:w-[240px] h-[300px] sm:h-[360px] transition-all duration-700 ease-out origin-bottom-left rotate-[8deg] ${isZooming && isHoldingOperaGlass ? 'translate-y-40 scale-75 opacity-0' : ''} ${isReading || isPhoneActive ? 'translate-y-60 opacity-0' : ''}`}>
-             {activeItem === 'OPERA_GLASS' ? (
-                <div className="w-full h-full relative">
-                   <div className="absolute inset-0 bg-zinc-800 rounded-t-[50px] border-t-4 border-r-4 border-zinc-700 shadow-2xl flex flex-col items-center justify-start pt-12">
-                      <div className="relative flex flex-col items-center">
-                        <div className="w-20 sm:w-28 h-4 bg-zinc-900 rounded shadow-md border-b-2 border-zinc-700 mb-[-2px] z-10" />
-                        <div className="flex gap-2">
-                           <div className="w-10 sm:w-14 h-24 sm:h-32 bg-gradient-to-tr from-black via-zinc-900 to-zinc-800 rounded-[10px_10px_20px_20px] border-2 border-zinc-600 shadow-xl relative overflow-hidden" />
-                           <div className="w-10 sm:w-14 h-24 sm:h-32 bg-gradient-to-tr from-black via-zinc-900 to-zinc-800 rounded-[10px_10px_20px_20px] border-2 border-zinc-600 shadow-xl relative overflow-hidden" />
-                        </div>
-                      </div>
-                   </div>
-                </div>
-             ) : (activeItem === 'BOOK' || activeItem === 'SIGNED_BOOK') ? (
-                <div className="w-full h-full bg-zinc-900 rounded-t-[50px] border-t-4 border-r-4 border-zinc-800 shadow-2xl overflow-hidden relative">
-                   <img src={activeItem === 'SIGNED_BOOK' ? SIGNED_PROGRAM_FIRST_PAGE : PROGRAM_PAGES[0]} className="w-full h-full object-cover opacity-90" />
-                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                </div>
-             ) : (
-                <div className="w-full h-full bg-zinc-900 rounded-t-[50px] border-t-4 border-r-4 border-zinc-800 shadow-2xl opacity-40" />
-             )}
-          </div>
+      <div className={`fixed inset-0 bg-white pointer-events-none z-[1000] transition-opacity duration-150 ${flash || celebFlash ? 'opacity-30' : 'opacity-0'}`} />
 
-          {/* SMARTPHONE UI */}
-          <div className={`absolute transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] flex items-center justify-center ${isPhoneActive ? 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] max-w-[850px] h-[65%] z-50' : 'bottom-[-40px] right-[-40px] w-[180px] sm:w-[240px] h-[300px] sm:h-[380px] rotate-[-10deg]'} ${isReading ? 'opacity-0 scale-50' : ''}`}>
-            <div className={`relative border-4 border-zinc-900 shadow-2xl transition-all duration-700 overflow-hidden ${isPhoneActive ? 'w-full h-full rotate-0 rounded-[30px] border-[12px] border-zinc-900/90' : 'w-full h-full rounded-[40px] bg-zinc-950'} ${cameraMode ? 'bg-transparent' : 'bg-zinc-950'}`}>
-              <div className="w-full h-full relative flex flex-col pointer-events-auto bg-transparent">
-                {cameraMode ? (
-                  <>
-                    <div className="absolute inset-0 z-0 pointer-events-none flex items-center justify-center bg-transparent">
-                        <div className="absolute inset-0 border-[1px] border-white/10 grid grid-cols-3 grid-rows-3">
-                           <div className="border-[0.5px] border-white/5" /><div className="border-[0.5px] border-white/5" /><div className="border-[0.5px] border-white/5" />
-                           <div className="border-[0.5px] border-white/5" /><div className="border-[0.5px] border-white/5" /><div className="border-[0.5px] border-white/5" />
-                           <div className="border-[0.5px] border-white/5" /><div className="border-[0.5px] border-white/5" /><div className="border-[0.5px] border-white/5" />
-                        </div>
-                        <div className="absolute top-4 left-4 w-8 h-8 border-t-2 border-l-2 border-white/40" />
-                        <div className="absolute top-4 right-4 w-8 h-8 border-t-2 border-r-2 border-white/40" />
-                        <div className="absolute bottom-4 left-4 w-8 h-8 border-b-2 border-l-2 border-white/40" />
-                        <div className="absolute bottom-4 right-4 w-8 h-8 border-b-2 border-r-2 border-white/40" />
-                        <div className="absolute inset-0 flex items-center justify-center">
-                           <div className="w-48 h-48 border border-white/20 rounded-full animate-pulse" />
-                           {activePoster && <div className="absolute flex flex-col items-center"><Scan size={120} className="text-white drop-shadow-glow" /><span className="mt-4 bg-white text-black px-4 py-1 text-[10px] font-black uppercase tracking-widest rounded-full text-center">{activePoster}</span></div>}
-                        </div>
-                        <div className="absolute inset-0 z-10 overflow-hidden pointer-events-none flex items-center justify-center p-6">
-                           {isVideoLoading && <div className="absolute inset-0 flex items-center justify-center bg-black/40"><Loader2 className="animate-spin text-white" /></div>}
-                           <video 
-                              ref={videoRef} 
-                              className="max-w-full max-h-full object-contain transition-opacity duration-500 shadow-2xl rounded-lg" 
-                              style={{ opacity: videoOpacity }} 
-                              loop 
-                              playsInline 
-                              onPlaying={() => { setIsVideoLoading(false); setVideoOpacity(1); }} 
-                           />
-                        </div>
-                    </div>
-                    <div className="mt-auto p-10 flex items-center justify-between w-full bg-gradient-to-t from-black/40 to-transparent relative z-20">
-                      <div className="flex flex-col text-white/50 text-[10px] font-mono"><span>4K</span><span>RAW</span></div>
-                      <button onClick={takePhoto} className="w-16 h-16 rounded-full border-4 border-white flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"><div className="w-12 h-12 bg-white rounded-full shadow-lg" /></button>
-                      <button onClick={() => { setGalleryOpen(true); setCameraMode(false); }} className="w-12 h-12 bg-zinc-900 rounded-xl flex items-center justify-center border border-white/10 overflow-hidden">
-                        {inventory.length > 0 ? <img src={inventory[0]} className="w-full h-full object-cover" /> : <ImageIcon size={20} className="text-white/20" />}
-                      </button>
-                    </div>
-                  </>
-                ) : galleryOpen ? (
-                  <div className="absolute inset-0 bg-zinc-950 z-[60] flex flex-col animate-in slide-in-from-bottom duration-500 pointer-events-auto">
-                    <div className="p-8 flex justify-between items-center border-b border-white/5">
-                      <div className="flex items-center gap-4">
-                        {selectedPhotoIndex !== null && <button onClick={() => setSelectedPhotoIndex(null)} className="text-white hover:text-white/70"><ChevronLeft size={24} /></button>}
-                        <span className="text-white text-[10px] font-black uppercase tracking-widest">{selectedPhotoIndex !== null ? 'Photo View' : 'Gallery'}</span>
-                      </div>
-                      <button onClick={handlePhoneClose} className="text-white/30 hover:text-white p-2 bg-white/5 rounded-full flex items-center gap-2 px-3"><span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline">Close</span><X size={24}/></button>
-                    </div>
-                    <div className="flex-1 overflow-y-auto p-4 flex flex-col">
-                      {selectedPhotoIndex !== null ? (
-                        <div className="relative w-full h-full flex flex-col items-center justify-center gap-6 animate-in fade-in duration-300">
-                          <div className="relative w-full max-w-xl aspect-video rounded-2xl overflow-hidden shadow-2xl border border-white/10"><img src={inventory[selectedPhotoIndex]} className="w-full h-full object-contain bg-black" /></div>
-                          <div className="flex gap-4">
-                            <button onClick={() => deletePhoto(selectedPhotoIndex)} className="px-8 py-3 bg-red-600/20 text-red-500 rounded-full border border-red-600/30 flex items-center gap-2 hover:bg-red-600 hover:text-white transition-all font-black uppercase text-[10px] tracking-widest"><Trash2 size={16} /> Delete</button>
-                            <button onClick={() => setSelectedPhotoIndex(null)} className="px-8 py-3 bg-white text-black rounded-full font-black uppercase text-[10px] tracking-widest hover:scale-105 transition-transform">Back</button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 content-start animate-in fade-in duration-300">
-                          {inventory.length > 0 ? inventory.map((img, i) => (
-                              <div key={i} onClick={() => setSelectedPhotoIndex(i)} className="aspect-square bg-zinc-900 rounded-xl overflow-hidden border border-white/5 shadow-lg group relative cursor-pointer hover:border-white/20 transition-all active:scale-95">
-                                <img src={img} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
-                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
-                              </div>
-                            )) : (
-                            <div className="col-span-full py-20 text-center flex flex-col items-center gap-4">
-                              <ImageIcon size={48} className="text-white/10" />
-                              <span className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">Your gallery is empty</span>
-                              <button onClick={() => { setCameraMode(true); setGalleryOpen(false); }} className="mt-4 px-6 py-2 bg-white text-black rounded-full text-[10px] font-black uppercase tracking-widest">Take a Photo</button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="w-full h-full flex flex-col p-6 sm:p-10 bg-zinc-950">
-                    <div className="flex justify-between items-center text-zinc-600 text-[10px] font-black mb-12">
-                      <div className="flex flex-col items-start leading-none">
-                        <span>{formattedTime}</span>
-                        <span className="text-[8px] opacity-60 uppercase tracking-tighter">{formattedLocation}</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <Maximize size={12} className="cursor-pointer hover:text-white" onClick={toggleFullscreen} />
-                        <Zap size={14} className="fill-current" />
-                      </div>
-                    </div>
-                    <div className="text-white text-4xl sm:text-6xl font-black tracking-tighter mb-2">{formattedTime}</div>
-                    <div className="text-zinc-600 text-[10px] font-black uppercase tracking-widest mb-16">{formattedDate}</div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <button onClick={() => { setCameraMode(true); }} className="aspect-square bg-zinc-900 rounded-[24px] flex items-center justify-center text-white hover:bg-zinc-800 transition-all hover:scale-105 shadow-2xl"><Camera size={32} /></button>
-                      <button onClick={() => { setGalleryOpen(true); }} className="aspect-square bg-zinc-900 rounded-[24px] flex items-center justify-center text-white hover:bg-zinc-800 transition-all hover:scale-105 shadow-2xl"><ImageIcon size={32} /></button>
-                    </div>
-                    <div className="mt-auto text-center opacity-30 text-[8px] uppercase font-black tracking-[0.4em] text-white animate-pulse">Press [C] for Camera | [V] for Gallery</div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* HOTBAR */}
-      {hasStarted && (
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-50 flex gap-3 p-2 sm:p-3 bg-black/80 backdrop-blur-xl rounded-2xl border border-white/10 transition-opacity duration-500"
-             style={{ opacity: hotbarOpacity }}>
+      {hasStarted && !isReading && !cameraMode && !galleryOpen && (
+        <div className={`absolute bottom-10 left-1/2 -translate-x-1/2 z-50 flex gap-4 p-4 bg-black/85 backdrop-blur-3xl rounded-[2.5rem] border border-white/10 shadow-[0_40px_80px_-15px_rgba(0,0,0,0.8)] flex-nowrap min-w-max transition-all duration-700 ${showHotbar ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
           {hotbar.map((item, index) => (
-            <div key={index} 
-                 onClick={() => { setActiveSlot(index); triggerHotbar(); }}
-                 className={`w-10 h-10 sm:w-14 sm:h-14 bg-zinc-900/50 border-2 rounded-xl flex items-center justify-center ${activeSlot === index ? 'border-white scale-110 shadow-[0_0_20_rgba(255,255,255,0.2)]' : 'border-white/5'} transition-all duration-300 relative pointer-events-auto cursor-pointer`}>
-              {item === 'OPERA_GLASS' && <Binoculars size={20} className="text-white" />}
-              {item === 'BOOK' && <BookOpen size={20} className="text-white" />}
-              {item === 'SIGNED_BOOK' && <><BookOpen size={20} className="text-yellow-400" /><Star size={10} className="absolute top-1 right-1 sm:top-2 sm:right-2 text-yellow-400 fill-current" /></>}
-              <div className="absolute bottom-0 right-1 sm:bottom-1 sm:right-2 text-[8px] sm:text-[10px] text-zinc-600 font-black">{index + 1}</div>
+            <div key={index} onClick={() => setActiveSlot(index)} className={`w-16 h-16 bg-zinc-900/70 border-2 rounded-[1.5rem] flex items-center justify-center ${activeSlot === index ? 'border-white scale-110 shadow-[0_0_40px_rgba(255,255,255,0.3)]' : 'border-white/5 hover:border-white/20'} transition-all duration-300 cursor-pointer relative group flex-shrink-0`}>
+              {item === 'OPERA_GLASS' && <Binoculars size={32} className="text-white transition-transform group-hover:scale-110" />}
+              {item === 'BOOK' && <BookOpen size={32} className="text-white transition-transform group-hover:scale-110" />}
+              {item === 'SIGNED_BOOK' && <div className="relative group-hover:scale-110 transition-transform"><BookOpen size={32} className="text-yellow-400" /><Star size={14} className="absolute -top-1 -right-1 text-yellow-400 fill-current" /></div>}
+              {item === 'TICKET' && <Ticket size={32} className="text-white transition-transform group-hover:scale-110" />}
+              <div className="absolute -bottom-2 -right-2 w-7 h-7 bg-white text-black text-[10px] rounded-full flex items-center justify-center font-black shadow-2xl">{index + 1}</div>
             </div>
           ))}
         </div>

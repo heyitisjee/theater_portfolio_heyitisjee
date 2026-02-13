@@ -1,7 +1,5 @@
 {
   "name": "Ethereal Cinema Lobby",
   "description": "A first-person 3D experience featuring a high-fidelity theater lobby with interactive smartphone UI and Gemini AI Vision.",
-  "requestFramePermissions": [
-    "camera"
-  ]
+  "requestFramePermissions": []
 }

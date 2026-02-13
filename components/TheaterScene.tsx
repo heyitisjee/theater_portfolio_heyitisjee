@@ -5,14 +5,6 @@ import * as THREE from 'three';
 import Player from './Player';
 import Lobby from './Lobby';
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      [key: string]: any;
-    }
-  }
-}
-
 interface TheaterSceneProps {
   onTargetChange: (targetName: string | null) => void;
   onChairTargetChange: (chairName: string | null) => void;
@@ -37,6 +29,10 @@ interface TheaterSceneProps {
   isVisible?: boolean;
   joystickInput?: { x: number, y: number };
   isTouchDevice?: boolean;
+  isInAuditorium: boolean;
+  equippedItem: string | null;
+  hasProgram: boolean;
+  phoneProps: any;
 }
 
 const TheaterScene: React.FC<TheaterSceneProps> = ({ 
@@ -62,7 +58,11 @@ const TheaterScene: React.FC<TheaterSceneProps> = ({
   fov = 75,
   isVisible = true,
   joystickInput = { x: 0, y: 0 },
-  isTouchDevice = false
+  isTouchDevice = false,
+  isInAuditorium,
+  equippedItem,
+  hasProgram,
+  phoneProps
 }) => {
   const { camera } = useThree();
 
@@ -76,8 +76,8 @@ const TheaterScene: React.FC<TheaterSceneProps> = ({
 
   return (
     <group visible={isVisible}>
-      <ambientLight intensity={1.0} color="#ffffff" /> 
-      <directionalLight position={[10, 20, 10]} intensity={0.6} castShadow />
+      <ambientLight intensity={isInAuditorium ? 0.05 : 0.8} color="#ffffff" /> 
+      <directionalLight position={[10, 20, 10]} intensity={isInAuditorium ? 0.1 : 0.6} castShadow />
       
       <Lobby 
         highlightedPoster={highlightedPoster} 
@@ -110,6 +110,9 @@ const TheaterScene: React.FC<TheaterSceneProps> = ({
         isCameraActive={isCameraActive}
         joystickInput={joystickInput}
         isTouchDevice={isTouchDevice}
+        equippedItem={equippedItem}
+        hasProgram={hasProgram}
+        phoneProps={phoneProps}
       />
     </group>
   );
