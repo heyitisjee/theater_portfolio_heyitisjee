@@ -2,7 +2,7 @@
 import React, { useRef, useMemo, useEffect, Suspense, useState, useCallback } from 'react';
 import { useFrame, useThree, extend } from '@react-three/fiber';
 import * as THREE_LIB from 'three';
-import { Vector3, Raycaster, Vector2, Object3D, ShaderMaterial } from 'three';
+import { Vector3, Raycaster, Vector2, Object3D, ShaderMaterial, Euler } from 'three';
 import { useKeyboard } from '../hooks/useKeyboard';
 import { useTexture, Html, useFBO } from '@react-three/drei';
 import { Camera as CameraIcon, Image as ImageIcon, Trash2, X, Battery, Clock, Signal, Wifi, Download, ChevronLeft, ChevronRight, Info } from 'lucide-react';
@@ -396,9 +396,9 @@ const ViewModel: React.FC<{ equippedItem: string | null, isMoving: boolean, phon
 };
 
 const Player: React.FC<PlayerProps> = ({ 
-  onTargetChange, onChairTargetChange, onAuditoriumDoorDistanceChange, onLobbyDoorDistanceChange, onUsherHover, onStageDoorApproach, onPerformerHover, onAuditoriumEntry, onAuditoriumExit, auditoriumDoorOpen, lobbyDoorOpen, isSitting, sittingChairId, equippedItem, hasProgram, phoneProps
+  onTargetChange, onChairTargetChange, onAuditoriumDoorDistanceChange, onLobbyDoorDistanceChange, onUsherHover, onStageDoorApproach, onPerformerHover, onAuditoriumEntry, onAuditoriumExit, auditoriumDoorOpen, lobbyDoorOpen, isSitting, sittingChairId, equippedItem, hasProgram, phoneProps, isTouchDevice, joystickInput
 }) => {
-  const { camera, scene } = useThree();
+  const { camera, scene, gl } = useThree();
   const moveState = useKeyboard();
   const direction = useRef(new Vector3());
   const raycaster = useMemo(() => new Raycaster(), []);
@@ -408,6 +408,51 @@ const Player: React.FC<PlayerProps> = ({
   const [isMoving, setIsMoving] = useState(false);
   const PLAYER_HEIGHT = 2.1;
   const SPEED = 4.5;
+
+  // Touch look state
+  const touchStartPos = useRef<{ x: number, y: number } | null>(null);
+  const lookRotation = useRef(new Euler(0, 0, 0, 'YXZ'));
+
+  useEffect(() => {
+    if (!isTouchDevice) return;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      const touch = e.touches[0];
+      // Only capture touch for look on the right half of the screen
+      if (touch.clientX > window.innerWidth / 2) {
+        touchStartPos.current = { x: touch.clientX, y: touch.clientY };
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!touchStartPos.current) return;
+      const touch = e.touches[0];
+      const dx = touch.clientX - touchStartPos.current.x;
+      const dy = touch.clientY - touchStartPos.current.y;
+      
+      const sensitivity = 0.005;
+      lookRotation.current.y -= dx * sensitivity;
+      lookRotation.current.x -= dy * sensitivity;
+      lookRotation.current.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, lookRotation.current.x));
+      
+      camera.quaternion.setFromEuler(lookRotation.current);
+      
+      touchStartPos.current = { x: touch.clientX, y: touch.clientY };
+    };
+
+    const handleTouchEnd = () => {
+      touchStartPos.current = null;
+    };
+
+    gl.domElement.addEventListener('touchstart', handleTouchStart);
+    gl.domElement.addEventListener('touchmove', handleTouchMove);
+    gl.domElement.addEventListener('touchend', handleTouchEnd);
+    return () => {
+      gl.domElement.removeEventListener('touchstart', handleTouchStart);
+      gl.domElement.removeEventListener('touchmove', handleTouchMove);
+      gl.domElement.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [isTouchDevice, camera, gl]);
 
   useFrame((state, delta) => {
     if (isSitting && sittingChairId) {
@@ -421,12 +466,28 @@ const Player: React.FC<PlayerProps> = ({
     }
 
     direction.current.set(0, 0, 0);
-    const mX = Number(moveState.left) - Number(moveState.right);
-    const mZ = Number(moveState.backward) - Number(moveState.forward);
-    
-    if ((mX !== 0 || mZ !== 0) !== isMoving) setIsMoving(mX !== 0 || mZ !== 0);
 
-    direction.current.subVectors(new Vector3(0,0,mZ), new Vector3(mX,0,0)).normalize().multiplyScalar(SPEED).applyEuler(camera.rotation);
+    let mX = 0;
+    let mZ = 0;
+
+    if (isTouchDevice && joystickInput) {
+      mX = joystickInput.x;
+      mZ = joystickInput.y;
+    } else {
+      mX = Number(moveState.left) - Number(moveState.right);
+      mZ = Number(moveState.backward) - Number(moveState.forward);
+    }
+    
+    const currentlyMoving = mX !== 0 || mZ !== 0;
+    if (currentlyMoving !== isMoving) setIsMoving(currentlyMoving);
+
+    if (isTouchDevice && joystickInput) {
+      // For joystick, we use normalized inputs directly
+      direction.current.set(mX, 0, mZ).multiplyScalar(SPEED).applyEuler(new Euler(0, lookRotation.current.y, 0));
+    } else {
+      direction.current.subVectors(new Vector3(0,0,mZ), new Vector3(mX,0,0)).normalize().multiplyScalar(SPEED).applyEuler(camera.rotation);
+    }
+    
     direction.current.y = 0;
     const next = camera.position.clone().addScaledVector(direction.current, delta);
     

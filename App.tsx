@@ -3,7 +3,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { PointerLockControls } from '@react-three/drei';
 import TheaterScene from './components/TheaterScene';
-import { X, BookOpen, Star, Binoculars, Trash2, ChevronLeft, ChevronRight, Ticket } from 'lucide-react';
+import { X, BookOpen, Star, Binoculars, Trash2, ChevronLeft, ChevronRight, Ticket, Camera, Image as ImageIcon, Hand, ZoomIn } from 'lucide-react';
 
 export type ItemType = 'EMPTY' | 'OPERA_GLASS' | 'BOOK' | 'SIGNED_BOOK' | 'TICKET' | null;
 
@@ -35,10 +35,12 @@ const App: React.FC = () => {
   const [isLocked, setIsLocked] = useState(false);
   const [isReading, setIsReading] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
+  const [joystickInput, setJoystickInput] = useState({ x: 0, y: 0 });
+  const [mobileZoom, setMobileZoom] = useState(0.5); // 0 to 1 for opera glass zoom
   
-  // Starting with a ticket in hand (Slot 3)
   const [hotbar, setHotbar] = useState<ItemType[]>(['EMPTY', 'OPERA_GLASS', 'TICKET', null, null]);
-  const [activeSlot, setActiveSlot] = useState<number>(2); // Start with Ticket selected
+  const [activeSlot, setActiveSlot] = useState<number>(2); 
   const [showHotbar, setShowHotbar] = useState(false);
   const [cameraMode, setCameraMode] = useState(false);
   const [inventory, setInventory] = useState<string[]>([]);
@@ -66,10 +68,19 @@ const App: React.FC = () => {
   const hasProgram = hotbar.includes('BOOK') || hotbar.includes('SIGNED_BOOK');
   const equippedItem = hotbar[activeSlot];
 
-  // Usher hints logic
+  // Mobile detection
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+      setIsMobile(mobile);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   useEffect(() => {
     if (hasStarted && !isInAuditorium) {
-      // Random gallery hint every 60-90 seconds
       const triggerRandomHint = () => {
         if (!isInAuditorium && !activeDialogue && inventory.length > 0) {
           setActiveDialogue("Usher: You can see your captured photos by pressing 'V'.");
@@ -85,19 +96,24 @@ const App: React.FC = () => {
     return () => {
       if (randomHintIntervalRef.current) clearInterval(randomHintIntervalRef.current);
     };
-  }, [hasStarted, isInAuditorium, inventory.length]);
+  }, [hasStarted, isInAuditorium, inventory.length, activeDialogue]);
 
   useEffect(() => {
     if (hasStarted) {
       setShowHotbar(true);
-      if (hotbarTimerRef.current) clearTimeout(hotbarTimerRef.current);
-      hotbarTimerRef.current = setTimeout(() => setShowHotbar(false), 4000);
+      if (!isMobile) {
+        if (hotbarTimerRef.current) clearTimeout(hotbarTimerRef.current);
+        hotbarTimerRef.current = setTimeout(() => setShowHotbar(false), 4000);
+      }
     }
-  }, [hasStarted, hotbar]);
+  }, [hasStarted, hotbar, isMobile]);
 
-  // Items that can be inspected full-screen (Book, Signed Book, Ticket)
   const isInspectable = equippedItem === 'BOOK' || equippedItem === 'SIGNED_BOOK' || equippedItem === 'TICKET';
-  const currentTargetFov = (equippedItem === 'OPERA_GLASS' && isZooming) ? 30 : 75;
+  
+  // Mobile zoom calculation
+  const currentTargetFov = (equippedItem === 'OPERA_GLASS') 
+    ? (isMobile ? (75 - (mobileZoom * 50)) : (isZooming ? 30 : 75))
+    : 75;
 
   useEffect(() => {
     const shouldPlay = isInAuditorium && isSitting && hasStarted;
@@ -131,7 +147,6 @@ const App: React.FC = () => {
   }, []);
 
   const receiveBook = useCallback(() => {
-    // Replaces slot 2 (Ticket) with the Program Book
     setHotbar(prev => { let n = [...prev]; n[2] = 'BOOK'; return n; });
     setActiveSlot(2); setAuditoriumDoorOpen(true);
     setActiveDialogue("Usher: Here is your program. Enjoy the show!");
@@ -155,6 +170,22 @@ const App: React.FC = () => {
      }
   }, [hasProgram, hotbar]);
 
+  // Handle Mobile "Clicks" (taps) on interactables
+  const handleInteraction = useCallback(() => {
+    if (isHoveringUsher) {
+      if (hotbar.includes('TICKET')) receiveBook();
+      else setAuditoriumDoorOpen(true);
+    } else if (isHoveringPerformer && performerArrived) {
+      receiveAutograph();
+    } else if (isSitting) {
+      setIsSitting(false);
+      setSittingChair(null);
+    } else if (targetChair && isInAuditorium) {
+      setIsSitting(true);
+      setSittingChair(targetChair);
+    }
+  }, [isHoveringUsher, hotbar, receiveBook, isHoveringPerformer, performerArrived, receiveAutograph, isSitting, targetChair, isInAuditorium]);
+
   useEffect(() => {
     const handleMouseDown = (e: MouseEvent) => { 
       if (e.button === 2) setIsZooming(true); 
@@ -176,25 +207,12 @@ const App: React.FC = () => {
       if (['1', '2', '3', '4', '5'].includes(e.key)) setActiveSlot(parseInt(e.key) - 1);
       switch(e.code) {
         case 'KeyZ': setIsZooming(true); break;
-        case 'KeyC': 
-          setCameraMode(p => !p); 
-          setGalleryOpen(false); 
-          break;
-        case 'KeyV': 
-          setGalleryOpen(p => !p); 
-          setCameraMode(false); 
-          break;
-        case 'Space':
-          if (cameraMode && !isReading) takePhoto();
-          break;
-        case 'KeyE': case 'KeyR':
-          if (isHoveringUsher) { if (hotbar.includes('TICKET')) receiveBook(); else setAuditoriumDoorOpen(true); }
-          break;
+        case 'KeyC': setCameraMode(p => !p); setGalleryOpen(false); break;
+        case 'KeyV': setGalleryOpen(p => !p); setCameraMode(false); break;
+        case 'Space': if (cameraMode && !isReading) takePhoto(); break;
+        case 'KeyE': case 'KeyR': if (isHoveringUsher) { if (hotbar.includes('TICKET')) receiveBook(); else setAuditoriumDoorOpen(true); } break;
         case 'KeyG': if (isHoveringPerformer && performerArrived) receiveAutograph(); break;
-        case 'KeyF':
-          if (isSitting) { setIsSitting(false); setSittingChair(null); }
-          else if (targetChair && isInAuditorium) { setIsSitting(true); setSittingChair(targetChair); }
-          break;
+        case 'KeyF': if (isSitting) { setIsSitting(false); setSittingChair(null); } else if (targetChair && isInAuditorium) { setIsSitting(true); setSittingChair(targetChair); } break;
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => { if (e.code === 'KeyZ') setIsZooming(false); };
@@ -217,15 +235,15 @@ const App: React.FC = () => {
     } else if (isReading) {
       text = "Inspecting Item | Press [ESC] to Stop";
     } else if (isSitting) {
-      text = "Press [F] to Stand";
+      text = isMobile ? "Stand" : "Press [F] to Stand";
       autoHide = true;
     } else if (targetChair && isInAuditorium) {
-      text = "Press [F] to Sit";
+      text = isMobile ? "Sit" : "Press [F] to Sit";
       autoHide = true;
     } else if (isHoveringUsher) {
-      text = hotbar.includes('TICKET') ? "Show Ticket to Usher [R]" : "Talk to Usher [R]";
+      text = hotbar.includes('TICKET') ? (isMobile ? "Show Ticket" : "Show Ticket to Usher [R]") : (isMobile ? "Talk" : "Talk to Usher [R]");
     } else if (isHoveringPerformer && performerArrived) {
-      text = hotbar.includes('SIGNED_BOOK') ? "Greet Performer [G]" : "Get Signed Program [G]";
+      text = hotbar.includes('SIGNED_BOOK') ? (isMobile ? "Greet" : "Greet Performer [G]") : (isMobile ? "Autograph" : "Get Signed Program [G]");
     }
 
     setInteractionText(text);
@@ -236,18 +254,40 @@ const App: React.FC = () => {
         setInteractionText(null);
       }, 3000);
     }
-  }, [activeDialogue, isReading, isSitting, targetChair, isHoveringUsher, isHoveringPerformer, performerArrived, cameraMode, isInAuditorium, hotbar]);
+  }, [activeDialogue, isReading, isSitting, targetChair, isHoveringUsher, isHoveringPerformer, performerArrived, cameraMode, isInAuditorium, hotbar, isMobile]);
+
+  // Joystick handlers
+  const handleJoystickMove = (e: React.TouchEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const touch = e.touches[0];
+    const dx = touch.clientX - centerX;
+    const dy = touch.clientY - centerY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const maxDist = rect.width / 2;
+    const normalizedX = (dx / maxDist);
+    const normalizedY = (dy / maxDist);
+    setJoystickInput({
+      x: Math.max(-1, Math.min(1, normalizedX)),
+      y: Math.max(-1, Math.min(1, normalizedY))
+    });
+  };
+
+  const handleJoystickEnd = () => {
+    setJoystickInput({ x: 0, y: 0 });
+  };
 
   return (
     <div className="relative w-full h-full bg-[#020202] select-none overflow-hidden font-sans">
-      {isLocked && !cameraMode && !galleryOpen && !isReading && (
+      {isLocked && !cameraMode && !galleryOpen && !isReading && !isMobile && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] pointer-events-none">
           <div className="w-1.5 h-1.5 bg-white rounded-full border border-black/50" />
         </div>
       )}
 
-      {/* Persistence Shortcuts Overlay */}
-      {hasStarted && !isReading && (
+      {/* Shortcuts Overlay - PC/Tablet only */}
+      {hasStarted && !isReading && !isMobile && (
         <div className="absolute bottom-10 left-10 z-[150] pointer-events-none flex flex-col gap-1 text-white/50 font-black uppercase tracking-[0.2em] text-[9px] drop-shadow-lg text-left">
           <p>WASD to move</p>
           <p>C for camera</p>
@@ -320,10 +360,96 @@ const App: React.FC = () => {
               flash,
               targetedPoster
             }}
+            isTouchDevice={isMobile}
+            joystickInput={joystickInput}
           />
-          {hasStarted && <PointerLockControls onLock={() => setIsLocked(true)} onUnlock={() => setIsLocked(false)} />}
+          {hasStarted && !isMobile && <PointerLockControls onLock={() => setIsLocked(true)} onUnlock={() => setIsLocked(false)} />}
         </Canvas>
       </div>
+
+      {/* Mobile Interaction Area - Right Side */}
+      {isMobile && hasStarted && !isReading && !cameraMode && !galleryOpen && (
+        <div className="absolute inset-0 z-[100] flex pointer-events-none">
+           <div className="flex-1" /> {/* Left side for joystick */}
+           <div 
+            className="flex-1 pointer-events-auto touch-none" 
+            onTouchStart={(e) => {
+              // Only trigger if not tapping a UI button
+              if ((e.target as HTMLElement).tagName === 'DIV') {
+                // handle interaction on tap
+              }
+            }}
+           />
+        </div>
+      )}
+
+      {/* Mobile Joystick & Controls */}
+      {isMobile && hasStarted && !isReading && !cameraMode && !galleryOpen && (
+        <div className="absolute inset-0 z-[110] pointer-events-none">
+          {/* Movement Joystick */}
+          <div 
+            className="absolute bottom-12 left-12 w-32 h-32 bg-white/5 border-2 border-white/20 rounded-full flex items-center justify-center pointer-events-auto touch-none"
+            onTouchMove={handleJoystickMove}
+            onTouchEnd={handleJoystickEnd}
+          >
+            <div 
+              className="w-12 h-12 bg-white/40 rounded-full shadow-2xl transition-transform"
+              style={{ transform: `translate(${joystickInput.x * 40}px, ${joystickInput.y * 40}px)` }}
+            />
+          </div>
+
+          {/* Interaction Button */}
+          {interactionText && (
+            <div className="absolute bottom-36 right-12 pointer-events-auto">
+              <button 
+                onClick={handleInteraction}
+                className="w-20 h-20 bg-white text-black rounded-full flex flex-col items-center justify-center font-black uppercase text-[10px] shadow-2xl active:scale-90 transition-transform"
+              >
+                <Hand size={24} className="mb-1" />
+                {interactionText.split(' ')[0]}
+              </button>
+            </div>
+          )}
+
+          {/* Mobile UI: Camera & Gallery Buttons */}
+          <div className="absolute top-10 right-10 flex flex-col gap-4 pointer-events-auto">
+            <button 
+              onClick={() => { setCameraMode(true); setGalleryOpen(false); }}
+              className="w-14 h-14 bg-white/10 backdrop-blur-xl rounded-2xl border border-white/10 flex items-center justify-center text-white active:scale-90 transition-transform"
+            >
+              <Camera size={28} />
+            </button>
+            <button 
+              onClick={() => { setGalleryOpen(true); setCameraMode(false); }}
+              className="w-14 h-14 bg-white/10 backdrop-blur-xl rounded-2xl border border-white/10 flex items-center justify-center text-white active:scale-90 transition-transform overflow-hidden"
+            >
+              {inventory.length > 0 ? <img src={inventory[0]} className="w-full h-full object-cover" /> : <ImageIcon size={28} />}
+            </button>
+          </div>
+
+          {/* Opera Glass Zoom Bar */}
+          {equippedItem === 'OPERA_GLASS' && (
+             <div className="absolute right-10 top-1/2 -translate-y-1/2 flex flex-col items-center gap-4 pointer-events-auto">
+                <ZoomIn size={18} className="text-white/50" />
+                <div className="w-1.5 h-48 bg-white/10 rounded-full relative">
+                  <input 
+                    type="range" 
+                    min="0" 
+                    max="1" 
+                    step="0.01" 
+                    value={mobileZoom} 
+                    onChange={(e) => setMobileZoom(parseFloat(e.target.value))}
+                    className="absolute inset-0 w-48 h-1.5 opacity-0 cursor-pointer -rotate-90 origin-center translate-y-24"
+                  />
+                  <div 
+                    className="absolute bottom-0 w-full bg-white rounded-full transition-all"
+                    style={{ height: `${mobileZoom * 100}%` }}
+                  />
+                </div>
+             </div>
+          )}
+        </div>
+      )}
 
       {!hasStarted && (
         <div className="absolute inset-0 flex items-center justify-center z-[200] bg-zinc-950 text-white p-8">
@@ -337,7 +463,8 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {interactionText && !isReading && !cameraMode && !galleryOpen && (
+      {/* PC/Tablet Interaction Tooltip */}
+      {interactionText && !isReading && !cameraMode && !galleryOpen && !isMobile && (
         <div className={`absolute left-1/2 -translate-x-1/2 z-[150] pointer-events-none transition-all duration-500 top-[22%] scale-100`}>
           <div className="bg-white/95 px-10 py-3 rounded-full text-black text-[12px] font-black uppercase tracking-[0.2em] shadow-2xl border border-black/10 animate-pulse">
             {interactionText}
@@ -364,15 +491,36 @@ const App: React.FC = () => {
 
       <div className={`fixed inset-0 bg-white pointer-events-none z-[1000] transition-opacity duration-150 ${flash || celebFlash ? 'opacity-30' : 'opacity-0'}`} />
 
+      {/* Inventory Hotbar - Mobile is persistent */}
       {hasStarted && !isReading && !cameraMode && !galleryOpen && (
         <div className={`absolute bottom-10 left-1/2 -translate-x-1/2 z-50 flex gap-4 p-4 bg-black/85 backdrop-blur-3xl rounded-[2.5rem] border border-white/10 shadow-[0_40px_80px_-15px_rgba(0,0,0,0.8)] flex-nowrap min-w-max transition-all duration-700 ${showHotbar ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
           {hotbar.map((item, index) => (
-            <div key={index} onClick={() => setActiveSlot(index)} className={`w-16 h-16 bg-zinc-900/70 border-2 rounded-[1.5rem] flex items-center justify-center ${activeSlot === index ? 'border-white scale-110 shadow-[0_0_40px_rgba(255,255,255,0.3)]' : 'border-white/5 hover:border-white/20'} transition-all duration-300 cursor-pointer relative group flex-shrink-0`}>
-              {item === 'OPERA_GLASS' && <Binoculars size={32} className="text-white transition-transform group-hover:scale-110" />}
-              {item === 'BOOK' && <BookOpen size={32} className="text-white transition-transform group-hover:scale-110" />}
-              {item === 'SIGNED_BOOK' && <div className="relative group-hover:scale-110 transition-transform"><BookOpen size={32} className="text-yellow-400" /><Star size={14} className="absolute -top-1 -right-1 text-yellow-400 fill-current" /></div>}
-              {item === 'TICKET' && <Ticket size={32} className="text-white transition-transform group-hover:scale-110" />}
-              <div className="absolute -bottom-2 -right-2 w-7 h-7 bg-white text-black text-[10px] rounded-full flex items-center justify-center font-black shadow-2xl">{index + 1}</div>
+            <div 
+              key={index} 
+              onClick={() => {
+                setActiveSlot(index);
+                if (item && item !== 'EMPTY' && isMobile) {
+                  // If tapping an interactable item on mobile, maybe auto-inspect? 
+                  // For now just selecting is fine
+                }
+              }} 
+              className={`w-14 h-14 sm:w-16 sm:h-16 bg-zinc-900/70 border-2 rounded-[1.2rem] sm:rounded-[1.5rem] flex items-center justify-center ${activeSlot === index ? 'border-white scale-110 shadow-[0_0_40px_rgba(255,255,255,0.3)]' : 'border-white/5 hover:border-white/20'} transition-all duration-300 cursor-pointer relative group flex-shrink-0`}
+            >
+              {item === 'OPERA_GLASS' && <Binoculars size={28} className="text-white transition-transform group-hover:scale-110" />}
+              {item === 'BOOK' && <BookOpen size={28} className="text-white transition-transform group-hover:scale-110" />}
+              {item === 'SIGNED_BOOK' && <div className="relative group-hover:scale-110 transition-transform"><BookOpen size={28} className="text-yellow-400" /><Star size={12} className="absolute -top-1 -right-1 text-yellow-400 fill-current" /></div>}
+              {item === 'TICKET' && <Ticket size={28} className="text-white transition-transform group-hover:scale-110" />}
+              <div className="absolute -bottom-2 -right-2 w-6 h-6 sm:w-7 sm:h-7 bg-white text-black text-[9px] sm:text-[10px] rounded-full flex items-center justify-center font-black shadow-2xl">{index + 1}</div>
+              
+              {/* Mobile Quick Inspect for certain items */}
+              {isMobile && activeSlot === index && item && item !== 'EMPTY' && item !== 'OPERA_GLASS' && (
+                <div 
+                  className="absolute -top-14 left-1/2 -translate-x-1/2 bg-white px-3 py-1.5 rounded-full text-black text-[9px] font-black uppercase tracking-widest shadow-2xl animate-in fade-in slide-in-from-bottom-2"
+                  onClick={(e) => { e.stopPropagation(); setIsReading(true); }}
+                >
+                  Inspect
+                </div>
+              )}
             </div>
           ))}
         </div>
